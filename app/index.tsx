@@ -1,5 +1,6 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Redirect } from "expo-router";
+import React from "react";
 
 const Page = () => {
   const { isSignedIn } = useAuth();

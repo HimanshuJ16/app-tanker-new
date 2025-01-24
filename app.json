@@ -14,7 +14,13 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Allow PhedTanker to access your location when the app is in use.",
+        "NSLocationAlwaysUsageDescription": "Allow PhedTanker to access your location in the background to track your trips.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow PhedTanker to access your location always and when in use for accurate trip tracking.",
+        "UIBackgroundModes": ["location", "fetch"]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,12 +28,15 @@
         "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "CAMERA",
+        "RECORD_AUDIO"
       ],
-      "package": "com.himanshujangir16.apptanker"
+      "package": "com.himanshujangir16.apptanker",
+      "backgroundModes": ["location"]
     },
     "web": {
       "bundler": "metro",
@@ -44,7 +53,15 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
+          "locationAlwaysAndWhenInUsePermission": "Allow PhedTanker to use your location always and when in use for trip tracking.",
+          "locationAlwaysPermission": "Allow PhedTanker to use your location in the background for trip tracking.",
+          "locationWhenInUsePermission": "Allow PhedTanker to use your location when the app is in use.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "foregroundService": {
+            "notificationTitle": "Location Tracking",
+            "notificationBody": "Your location is being tracked for your trip."
+          }
         }
       ],
       [

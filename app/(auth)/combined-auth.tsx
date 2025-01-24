@@ -9,6 +9,7 @@ import CustomButton from "@/components/CustomButton";
 import InputField from "@/components/InputField";
 import { icons, images } from "@/constants";
 import { fetchAPI } from "@/lib/fetch";
+import React from "react";
 
 export default function CombinedAuth() {
   const { isLoaded: isSignInLoaded, signIn, setActive: setSignInActive } = useSignIn();

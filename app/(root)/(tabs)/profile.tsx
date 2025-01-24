@@ -7,6 +7,7 @@ import * as SecureStore from 'expo-secure-store';
 
 import InputField from "@/components/InputField";
 import { icons } from "@/constants";
+import React from "react";
 
 const Profile = () => {
   const { user } = useUser();

@@ -6,6 +6,7 @@ import Swiper from "react-native-swiper";
 
 import CustomButton from "@/components/CustomButton";
 import { onboarding } from "@/constants";
+import React from "react";
 
 const Home = () => {
   const swiperRef = useRef<Swiper>(null);

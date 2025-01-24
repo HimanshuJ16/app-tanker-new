@@ -2,6 +2,7 @@ import { Tabs } from "expo-router";
 import { View, Text, TouchableOpacity, StyleSheet, TouchableOpacityProps } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React from "react";
 
 interface TabIconProps {
   name: keyof typeof Ionicons.glyphMap;
