@@ -1,242 +1,226 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, Linking, ScrollView, Alert } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { fetchAPI } from "@/lib/fetch";
-import { Ionicons } from "@expo/vector-icons";
-import * as Location from "expo-location";
-import { AppState, type AppStateStatus } from "react-native";
-import * as TaskManager from "expo-task-manager";
+import React, { useEffect, useState, useCallback } from "react"
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Linking,
+  ScrollView,
+  Alert,
+  Platform,
+  AppState,
+  type AppStateStatus,
+} from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
+import { useLocalSearchParams, useRouter } from "expo-router"
+import { fetchAPI } from "@/lib/fetch"
+import { Ionicons } from "@expo/vector-icons"
+import * as Location from "expo-location"
+import * as TaskManager from "expo-task-manager"
 
-const LOCATION_TASK_NAME = "background-location-task";
-
-TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
-  if (error) {
-    console.error("Background location task error:", error);
-    return;
+interface ExtendedLocationOptions extends Location.LocationOptions {
+  foregroundService?: {
+    notificationTitle: string
+    notificationBody: string
   }
-
-  if (data) {
-    const { locations } = data as any;
-    const location = locations[0];
-    const { id } = useLocalSearchParams();
-
-    if (location) {
-      try {
-        const response = await fetchAPI(
-          `${process.env.EXPO_PUBLIC_API_URL}/trip/location?id=${id}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-              altitude: location.coords.altitude,
-              speed: location.coords.speed,
-              heading: location.coords.heading,
-            }),
-          }
-        );
-
-        if (!response.success) {
-          console.error("Failed to update background location:", response.error);
-        }
-      } catch (err) {
-        console.error("Error sending background location:", err);
-      }
-    }
-  }
-});
-
-interface TripDetails {
-  tripId: string;
-  status: string;
-  startTime: string | null;
-  endTime: string | null;
-  distance: number | null;
-  booking: {
-    id: string;
-    journeyDate: string;
-    status: string;
-  };
-  hydrant: {
-    name: string;
-    address: string;
-  };
-  destination: {
-    name: string;
-    address: string;
-  };
-  customer: {
-    name: string;
-    contactNumber: string;
-    address: string;
-  };
 }
 
+interface TripDetails {
+  tripId: string
+  status: string
+  startTime: string | null
+  endTime: string | null
+  distance: number | null
+  booking: {
+    id: string
+    journeyDate: string
+    status: string
+  }
+  hydrant: {
+    name: string
+    address: string
+  }
+  destination: {
+    name: string
+    address: string
+  }
+  customer: {
+    name: string
+    contactNumber: string
+    address: string
+  }
+}
+
+const LOCATION_TRACKING = "location-tracking"
+
+const sendLocationUpdate = async (location: Location.LocationObject, tripId: string) => {
+  try {
+    const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/location?id=${tripId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        altitude: location.coords.altitude,
+        speed: location.coords.speed,
+        heading: location.coords.heading,
+      }),
+    })
+
+    if (response && response.success) {
+      console.log("Location updated successfully")
+    } else {
+      console.error("Failed to update location:", response?.error || "Unknown error")
+    }
+  } catch (error) {
+    console.error("Error sending location update:", error)
+  }
+}
+
+TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
+  const { id } = useLocalSearchParams<{ id: string }>()
+  if (error) {
+    console.error("Error in background location task:", error)
+    return
+  }
+  if (data) {
+    const { locations } = data as { locations: Location.LocationObject[] }
+    const location = locations[0]
+    if (location) {
+      await sendLocationUpdate(location, id) // We'll need to pass the `id` here
+    }
+  }
+})
+
 export default function Trip() {
-  const { id } = useLocalSearchParams();
-  const [tripDetails, setTripDetails] = useState<TripDetails | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
-  const [hasLocationPermission, setHasLocationPermission] = useState(false);
-  const [isTracking, setIsTracking] = useState(false);
-  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
+  const { id } = useLocalSearchParams<{ id: string }>()
+  const [tripDetails, setTripDetails] = useState<TripDetails | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+  const [hasLocationPermission, setHasLocationPermission] = useState(false)
+  const [locationSubscription, setLocationSubscription] = useState<Location.LocationSubscription | null>(null)
+  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState)
 
   useEffect(() => {
-    fetchTripDetails();
-  }, []);
+    fetchTripDetails()
+    setupLocationTracking(id)
 
-  useEffect(() => {
-    fetchTripDetails();
-
-    const appStateSubscription = AppState.addEventListener("change", handleAppStateChange);
-    setupLocationTracking();
-
-    // Check location tracking status periodically
-    const interval = setInterval(checkTrackingStatus, 5000);
+    const subscription = AppState.addEventListener("change", (nextAppState) => handleAppStateChange(nextAppState, id))
 
     return () => {
-      appStateSubscription.remove();
-      clearInterval(interval);
-    };
-  }, []);
+      subscription.remove()
+      stopLocationTracking()
+    }
+  }, [id])
 
-  const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+  const handleAppStateChange = (nextAppState: AppStateStatus, tripId: string) => {
+    setAppState(nextAppState)
     if (appState.match(/inactive|background/) && nextAppState === "active") {
-      console.log("App has come to the foreground");
-      const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
-      if (!hasStarted) {
-        setupLocationTracking();
-      }
+      setupLocationTracking(tripId)
     } else if (appState === "active" && nextAppState.match(/inactive|background/)) {
-      console.log("App has gone to the background");
+      stopLocationTracking()
     }
-    setAppState(nextAppState);
-  };
-
-  const setupLocationTracking = async () => {
-    try {
-      const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
-      console.log("Foreground permission status:", foregroundStatus);
-  
-      if (foregroundStatus !== "granted") {
-        setHasLocationPermission(false);
-        Alert.alert("Permission required", "Location permission is required to track your trip.");
-        return;
-      }
-  
-      const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-      console.log("Background permission status:", backgroundStatus);
-  
-      if (backgroundStatus !== "granted") {
-        setHasLocationPermission(false);
-        Alert.alert(
-          "Background Permission Required",
-          "We need background location access to track your trip while the app is not in use."
-        );
-        return;
-      }
-  
-      setHasLocationPermission(true);
-  
-      const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
-      if (!hasStarted) {
-        await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 10000,
-          distanceInterval: 0,
-          foregroundService: {
-            notificationTitle: "Location Tracking",
-            notificationBody: "Your location is being tracked for your trip.",
-          },
-        });
-      }
-      setIsTracking(true);
-      console.log("Location tracking started");
-    } catch (error) {
-      console.error("Error setting up location tracking:", error);
-      setIsTracking(false);
-    }
-  };  
-
-  const stopLocationTracking = async () => {
-    try {
-      const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
-      if (hasStarted) {
-        await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
-        console.log("Location tracking stopped");
-      }
-      setIsTracking(false);
-    } catch (error) {
-      console.error("Error stopping location tracking:", error);
-    }
-  };
-
-  const checkTrackingStatus = async () => {
-    try {
-      const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
-      setIsTracking(hasStarted);
-    } catch (error) {
-      console.error("Error checking tracking status:", error);
-    }
-  };
+  }
 
   const fetchTripDetails = async () => {
     try {
-      setLoading(true);
-      const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/info?id=${id}`);
+      setLoading(true)
+      const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/info?id=${id}`)
 
       if (response && response.success) {
-        setTripDetails(response.trip);
+        setTripDetails(response.trip)
       } else {
-        throw new Error(response?.error || "Failed to fetch trip details");
+        throw new Error(response?.error || "Failed to fetch trip details")
       }
     } catch (error) {
-      console.error("Error fetching trip details:", error);
-      setError(error instanceof Error ? error.message : "An unknown error occurred");
+      console.error("Error fetching trip details:", error)
+      setError(error instanceof Error ? error.message : "An unknown error occurred")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleOpenLocation = (address: string) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-    Linking.openURL(url);
-  };
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+    Linking.openURL(url)
+  }
 
   const handleCall = (phoneNumber: string) => {
-    Linking.openURL(`tel:${phoneNumber}`);
-  };
+    Linking.openURL(`tel:${phoneNumber}`)
+  }
 
   const handleGoBack = () => {
-    router.push("/(root)/(tabs)/home");
-  };
+    router.push("/(root)/(tabs)/home")
+  }
 
   const handleReachedHydrant = async () => {
     try {
       const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/${id}/reached-hydrant`, {
         method: "POST",
-      });
+      })
       if (response.success) {
-        Alert.alert("Success", "Hydrant reached status updated");
-        fetchTripDetails();
+        Alert.alert("Success", "Hydrant reached status updated")
+        fetchTripDetails()
       } else {
-        throw new Error(response.error || "Failed to update hydrant status");
+        throw new Error(response.error || "Failed to update hydrant status")
       }
     } catch (error) {
-      console.error("Error updating trip status:", error);
-      Alert.alert("Error", "Failed to update hydrant status. Please try again.");
+      console.error("Error updating trip status:", error)
+      Alert.alert("Error", "Failed to update hydrant status. Please try again.")
     }
-  };
+  }
+
+  const setupLocationTracking = async (tripId: string) => {
+    try {
+      const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync()
+      const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync()
+
+      if (foregroundStatus !== "granted" || backgroundStatus !== "granted") {
+        setHasLocationPermission(false)
+        Alert.alert(
+          "Permission Required",
+          "This app needs location permissions to track your trip, including when the app is in the background.",
+        )
+        return
+      }
+
+      setHasLocationPermission(true)
+
+      const subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 10000,
+          distanceInterval: 0,
+        },
+        (location) => {
+          sendLocationUpdate(location, tripId)
+        },
+      )
+
+      setLocationSubscription(subscription)
+      console.log("Location tracking started")
+    } catch (error) {
+      console.error("Error setting up location tracking:", error)
+      Alert.alert("Error", "Failed to setup location tracking. Please try again.")
+    }
+  }
+
+  const stopLocationTracking = () => {
+    if (locationSubscription) {
+      locationSubscription.remove()
+      setLocationSubscription(null)
+      console.log("Location tracking stopped")
+    }
+  }
 
   if (loading) {
     return (
       <SafeAreaView className="flex-1 bg-white justify-center items-center">
         <Text>Loading trip details...</Text>
       </SafeAreaView>
-    );
+    )
   }
 
   if (error) {
@@ -247,7 +231,7 @@ export default function Trip() {
           <Text className="text-white">Retry</Text>
         </TouchableOpacity>
       </SafeAreaView>
-    );
+    )
   }
 
   if (!tripDetails) {
@@ -258,7 +242,7 @@ export default function Trip() {
           <Text className="text-white">Go Back</Text>
         </TouchableOpacity>
       </SafeAreaView>
-    );
+    )
   }
 
   return (
@@ -327,7 +311,7 @@ export default function Trip() {
           <Text className="text-lg font-semibold">Location Tracking</Text>
           <Text>{hasLocationPermission ? "Enabled" : "Disabled"}</Text>
           <Text>App State: {appState}</Text>
-          <Text>Tracking: {isTracking ? "Active" : "Inactive"}</Text>
+          <Text>Tracking: {locationSubscription ? "Active" : "Inactive"}</Text>
         </View>
       </ScrollView>
 
@@ -337,5 +321,6 @@ export default function Trip() {
         </TouchableOpacity>
       </View>
     </SafeAreaView>
-  );
+  )
 }
+
