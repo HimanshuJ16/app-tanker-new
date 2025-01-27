@@ -17,6 +17,10 @@ import { Ionicons } from "@expo/vector-icons"
 import * as Location from "expo-location"
 import * as TaskManager from "expo-task-manager"
 
+declare global {
+  var tripId: string
+}
+
 interface ExtendedLocationOptions extends Location.LocationOptions {
   foregroundService?: {
     notificationTitle: string
@@ -79,7 +83,6 @@ const sendLocationUpdate = async (location: Location.LocationObject, tripId: str
 }
 
 TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
-  const { id } = useLocalSearchParams<{ id: string }>()
   if (error) {
     console.error("Error in background location task:", error)
     return
@@ -88,7 +91,7 @@ TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
     const { locations } = data as { locations: Location.LocationObject[] }
     const location = locations[0]
     if (location) {
-      await sendLocationUpdate(location, id) // We'll need to pass the `id` here
+      await sendLocationUpdate(location, global.tripId)
     }
   }
 })
@@ -104,6 +107,7 @@ export default function Trip() {
   const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState)
 
   useEffect(() => {
+    global.tripId = id
     fetchTripDetails()
     setupLocationTracking(id)
 
@@ -188,30 +192,32 @@ export default function Trip() {
 
       setHasLocationPermission(true)
 
-      const subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.Balanced,
-          timeInterval: 10000,
-          distanceInterval: 0,
+      await Location.startLocationUpdatesAsync(LOCATION_TRACKING, {
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: 10000,
+        distanceInterval: 10,
+        foregroundService: {
+          notificationTitle: "Trip Tracking Active",
+          notificationBody: "Your location is being tracked for the current trip",
         },
-        (location) => {
-          sendLocationUpdate(location, tripId)
-        },
-      )
+        // Make sure the app doesn't stop tracking in the background
+        pausesUpdatesAutomatically: false,
+        activityType: Location.ActivityType.AutomotiveNavigation,
+      })
 
-      setLocationSubscription(subscription)
-      console.log("Location tracking started")
+      console.log("Background location tracking started")
     } catch (error) {
       console.error("Error setting up location tracking:", error)
       Alert.alert("Error", "Failed to setup location tracking. Please try again.")
     }
   }
 
-  const stopLocationTracking = () => {
-    if (locationSubscription) {
-      locationSubscription.remove()
-      setLocationSubscription(null)
+  const stopLocationTracking = async () => {
+    try {
+      await Location.stopLocationUpdatesAsync(LOCATION_TRACKING)
       console.log("Location tracking stopped")
+    } catch (error) {
+      console.error("Error stopping location tracking:", error)
     }
   }
 
