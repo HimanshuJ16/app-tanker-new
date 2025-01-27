@@ -89,9 +89,9 @@ TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
   }
   if (data) {
     const { locations } = data as { locations: Location.LocationObject[] }
-    const location = locations[0]
-    if (location) {
-      await sendLocationUpdate(location, global.tripId)
+    if (locations && locations.length > 0) {
+      console.log("Background location update:", locations[0])
+      await sendLocationUpdate(locations[0], global.tripId)
     }
   }
 })
@@ -103,30 +103,23 @@ export default function Trip() {
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const [hasLocationPermission, setHasLocationPermission] = useState(false)
-  const [locationSubscription, setLocationSubscription] = useState<Location.LocationSubscription | null>(null)
   const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState)
+  const [trackingStatus, setTrackingStatus] = useState(false)
 
   useEffect(() => {
     global.tripId = id
     fetchTripDetails()
     setupLocationTracking(id)
 
-    const subscription = AppState.addEventListener("change", (nextAppState) => handleAppStateChange(nextAppState, id))
+    const subscription = AppState.addEventListener("change", (nextAppState) =>
+      handleAppStateChange(nextAppState, id)
+    )
 
     return () => {
       subscription.remove()
       stopLocationTracking()
     }
   }, [id])
-
-  const handleAppStateChange = (nextAppState: AppStateStatus, tripId: string) => {
-    setAppState(nextAppState)
-    if (appState.match(/inactive|background/) && nextAppState === "active") {
-      setupLocationTracking(tripId)
-    } else if (appState === "active" && nextAppState.match(/inactive|background/)) {
-      stopLocationTracking()
-    }
-  }
 
   const fetchTripDetails = async () => {
     try {
@@ -176,6 +169,17 @@ export default function Trip() {
     }
   }
 
+  const handleAppStateChange = (nextAppState: AppStateStatus, tripId: string) => {
+    setAppState(nextAppState)
+
+    if (appState.match(/inactive|background/) && nextAppState === "active") {
+      console.log("App has moved to the foreground, ensuring location tracking is active.")
+      setupLocationTracking(tripId)
+    } else if (appState === "active" && nextAppState.match(/inactive|background/)) {
+      console.log("App has moved to the background, continuing location tracking.")
+    }
+  }
+
   const setupLocationTracking = async (tripId: string) => {
     try {
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync()
@@ -185,27 +189,28 @@ export default function Trip() {
         setHasLocationPermission(false)
         Alert.alert(
           "Permission Required",
-          "This app needs location permissions to track your trip, including when the app is in the background.",
+          "This app needs location permissions to track your trip, including when the app is in the background."
         )
         return
       }
 
       setHasLocationPermission(true)
 
+      // Start background location tracking
       await Location.startLocationUpdatesAsync(LOCATION_TRACKING, {
         accuracy: Location.Accuracy.Balanced,
         timeInterval: 10000,
-        distanceInterval: 10,
+        distanceInterval: 0,
         foregroundService: {
           notificationTitle: "Trip Tracking Active",
           notificationBody: "Your location is being tracked for the current trip",
         },
-        // Make sure the app doesn't stop tracking in the background
-        pausesUpdatesAutomatically: false,
+        pausesUpdatesAutomatically: false, // Prevent updates from stopping in the background
         activityType: Location.ActivityType.AutomotiveNavigation,
       })
 
-      console.log("Background location tracking started")
+      console.log("Location tracking started successfully.")
+      setTrackingStatus(true)
     } catch (error) {
       console.error("Error setting up location tracking:", error)
       Alert.alert("Error", "Failed to setup location tracking. Please try again.")
@@ -216,10 +221,21 @@ export default function Trip() {
     try {
       await Location.stopLocationUpdatesAsync(LOCATION_TRACKING)
       console.log("Location tracking stopped")
+      setTrackingStatus(false)
     } catch (error) {
       console.error("Error stopping location tracking:", error)
     }
   }
+
+  const checkTrackingStatus = async () => {
+    const isRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TRACKING)
+    const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING)
+    setTrackingStatus(isRegistered && isTracking)
+  }
+
+  useEffect(() => {
+    checkTrackingStatus()
+  }, [appState])
 
   if (loading) {
     return (
@@ -317,7 +333,7 @@ export default function Trip() {
           <Text className="text-lg font-semibold">Location Tracking</Text>
           <Text>{hasLocationPermission ? "Enabled" : "Disabled"}</Text>
           <Text>App State: {appState}</Text>
-          <Text>Tracking: {locationSubscription ? "Active" : "Inactive"}</Text>
+          <Text>Tracking: {trackingStatus ? "Active" : "Inactive"}</Text>
         </View>
       </ScrollView>
 
@@ -329,4 +345,3 @@ export default function Trip() {
     </SafeAreaView>
   )
 }
-
