@@ -92,7 +92,7 @@ export default function Trip() {
 
   const handleReachedHydrant = async () => {
     try {
-      const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/${id}/reached-hydrant`, {
+      const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/reached-hydrant?id=${id}`, {
         method: "POST",
       })
       if (response.success) {

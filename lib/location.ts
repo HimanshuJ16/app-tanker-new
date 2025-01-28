@@ -49,7 +49,7 @@ export const setupLocationTracking = async (tripId: string): Promise<boolean> =>
     await Location.startLocationUpdatesAsync(LOCATION_TRACKING, {
       accuracy: Location.Accuracy.Balanced,
       timeInterval: 10000,
-      distanceInterval: 0,
+      distanceInterval: 10,
       foregroundService: {
         notificationTitle: "Trip Tracking Active",
         notificationBody: "Your location is being tracked for the current trip",
