@@ -1,31 +1,13 @@
-import React, { useEffect, useState, useCallback } from "react"
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Linking,
-  ScrollView,
-  Alert,
-  Platform,
-  AppState,
-  type AppStateStatus,
-} from "react-native"
+import React, { useEffect, useState } from "react"
+import { View, Text, TouchableOpacity, Linking, ScrollView, Alert, AppState, type AppStateStatus } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { fetchAPI } from "@/lib/fetch"
 import { Ionicons } from "@expo/vector-icons"
-import * as Location from "expo-location"
-import * as TaskManager from "expo-task-manager"
+import { LOCATION_TRACKING, setupLocationTracking, stopLocationTracking, checkTrackingStatus } from "@/lib/location"
 
 declare global {
   var tripId: string
-}
-
-interface ExtendedLocationOptions extends Location.LocationOptions {
-  foregroundService?: {
-    notificationTitle: string
-    notificationBody: string
-  }
 }
 
 interface TripDetails {
@@ -54,48 +36,6 @@ interface TripDetails {
   }
 }
 
-const LOCATION_TRACKING = "location-tracking"
-
-const sendLocationUpdate = async (location: Location.LocationObject, tripId: string) => {
-  try {
-    const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/location?id=${tripId}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        altitude: location.coords.altitude,
-        speed: location.coords.speed,
-        heading: location.coords.heading,
-      }),
-    })
-
-    if (response && response.success) {
-      console.log("Location updated successfully")
-    } else {
-      console.error("Failed to update location:", response?.error || "Unknown error")
-    }
-  } catch (error) {
-    console.error("Error sending location update:", error)
-  }
-}
-
-TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
-  if (error) {
-    console.error("Error in background location task:", error)
-    return
-  }
-  if (data) {
-    const { locations } = data as { locations: Location.LocationObject[] }
-    if (locations && locations.length > 0) {
-      console.log("Background location update:", locations[0])
-      await sendLocationUpdate(locations[0], global.tripId)
-    }
-  }
-})
-
 export default function Trip() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const [tripDetails, setTripDetails] = useState<TripDetails | null>(null)
@@ -109,11 +49,9 @@ export default function Trip() {
   useEffect(() => {
     global.tripId = id
     fetchTripDetails()
-    setupLocationTracking(id)
+    initializeLocationTracking(id)
 
-    const subscription = AppState.addEventListener("change", (nextAppState) =>
-      handleAppStateChange(nextAppState, id)
-    )
+    const subscription = AppState.addEventListener("change", (nextAppState) => handleAppStateChange(nextAppState, id))
 
     return () => {
       subscription.remove()
@@ -174,68 +112,31 @@ export default function Trip() {
 
     if (appState.match(/inactive|background/) && nextAppState === "active") {
       console.log("App has moved to the foreground, ensuring location tracking is active.")
-      setupLocationTracking(tripId)
+      initializeLocationTracking(tripId)
     } else if (appState === "active" && nextAppState.match(/inactive|background/)) {
       console.log("App has moved to the background, continuing location tracking.")
     }
   }
 
-  const setupLocationTracking = async (tripId: string) => {
-    try {
-      const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync()
-      const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync()
-
-      if (foregroundStatus !== "granted" || backgroundStatus !== "granted") {
-        setHasLocationPermission(false)
-        Alert.alert(
-          "Permission Required",
-          "This app needs location permissions to track your trip, including when the app is in the background."
-        )
-        return
-      }
-
-      setHasLocationPermission(true)
-
-      // Start background location tracking
-      await Location.startLocationUpdatesAsync(LOCATION_TRACKING, {
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: 10000,
-        distanceInterval: 0,
-        foregroundService: {
-          notificationTitle: "Trip Tracking Active",
-          notificationBody: "Your location is being tracked for the current trip",
-        },
-        pausesUpdatesAutomatically: false, // Prevent updates from stopping in the background
-        activityType: Location.ActivityType.AutomotiveNavigation,
-      })
-
-      console.log("Location tracking started successfully.")
-      setTrackingStatus(true)
-    } catch (error) {
-      console.error("Error setting up location tracking:", error)
-      Alert.alert("Error", "Failed to setup location tracking. Please try again.")
+  const initializeLocationTracking = async (tripId: string) => {
+    const success = await setupLocationTracking(tripId)
+    setHasLocationPermission(success)
+    if (!success) {
+      Alert.alert(
+        "Permission Required",
+        "This app needs location permissions to track your trip, including when the app is in the background.",
+      )
     }
-  }
-
-  const stopLocationTracking = async () => {
-    try {
-      await Location.stopLocationUpdatesAsync(LOCATION_TRACKING)
-      console.log("Location tracking stopped")
-      setTrackingStatus(false)
-    } catch (error) {
-      console.error("Error stopping location tracking:", error)
-    }
-  }
-
-  const checkTrackingStatus = async () => {
-    const isRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TRACKING)
-    const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING)
-    setTrackingStatus(isRegistered && isTracking)
+    setTrackingStatus(success)
   }
 
   useEffect(() => {
-    checkTrackingStatus()
-  }, [appState])
+    const updateTrackingStatus = async () => {
+      const status = await checkTrackingStatus()
+      setTrackingStatus(status)
+    }
+    updateTrackingStatus()
+  }, [])
 
   if (loading) {
     return (
@@ -345,3 +246,4 @@ export default function Trip() {
     </SafeAreaView>
   )
 }
+
