@@ -4,7 +4,9 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { fetchAPI } from "@/lib/fetch"
 import { Ionicons } from "@expo/vector-icons"
-import { LOCATION_TRACKING, setupLocationTracking, stopLocationTracking, checkTrackingStatus } from "@/lib/location"
+import { setupLocationTracking, stopLocationTracking, checkTrackingStatus } from "@/lib/location"
+import * as ImagePicker from "expo-image-picker";
+import { uploadImageToCloudinary } from "@/lib/cloudinary"
 
 declare global {
   var tripId: string
@@ -90,10 +92,11 @@ export default function Trip() {
     router.push("/(root)/(tabs)/home")
   }
 
-  const handleReachedHydrant = async () => {
+  const handleReachedHydrant = async (photoUrl?: string) => {
     try {
       const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/reached-hydrant?id=${id}`, {
         method: "POST",
+        body: JSON.stringify({ photoUrl })
       })
       if (response.success) {
         Alert.alert("Success", "Hydrant reached status updated")
@@ -106,6 +109,26 @@ export default function Trip() {
       Alert.alert("Error", "Failed to update hydrant status. Please try again.")
     }
   }
+
+  const pickImageFromCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (permission.granted) {
+      let result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
+
+      console.log(result);
+
+      if (!result.canceled) {
+        const link = await uploadImageToCloudinary(result.assets[0]);
+        console.log("uploaded link=>", link);
+        handleReachedHydrant(link);
+      }
+    }
+  };
 
   const handleAppStateChange = (nextAppState: AppStateStatus, tripId: string) => {
     setAppState(nextAppState)
@@ -239,11 +262,10 @@ export default function Trip() {
       </ScrollView>
 
       <View className="flex-row justify-around p-4">
-        <TouchableOpacity className="bg-teal-500 p-4 rounded flex-1 mr-2" onPress={handleReachedHydrant}>
+        <TouchableOpacity className="bg-teal-500 p-4 rounded flex-1 mr-2" onPress={pickImageFromCamera}>
           <Text className="text-white text-center font-bold">REACHED HYDRANT</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   )
 }
-
