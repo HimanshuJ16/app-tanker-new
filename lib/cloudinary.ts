@@ -1,7 +1,6 @@
 export const uploadImageToCloudinary = async (obj: any) => {
   const cloudName = "himanshujangir";
-  const apiKey = "594334666294454";
-  const apiSecret = "prRwTsNtBcPhRiye-szJviNsyYA";
+  const uploadPreset = "ml_default";
 
   const timestamp = Math.floor(Date.now() / 1000);
 
@@ -14,7 +13,7 @@ export const uploadImageToCloudinary = async (obj: any) => {
     type: obj.mimeType,
   } as any);
 
-  formData.append("api_key", apiKey);
+  formData.append("upload_preset", uploadPreset); 
   formData.append("timestamp", timestamp.toString());
 
   console.log("formData=>", formData);
@@ -34,7 +33,7 @@ export const uploadImageToCloudinary = async (obj: any) => {
     return data.secure_url;
   } else {
     console.log("error=>", data.error.message);
-    return data.error.message;
+    return null;
   }
 };
 
