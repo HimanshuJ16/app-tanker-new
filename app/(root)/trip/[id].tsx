@@ -1,12 +1,23 @@
-import React, { useEffect, useState } from "react"
-import { View, Text, TouchableOpacity, Linking, ScrollView, Alert, AppState, type AppStateStatus } from "react-native"
+import { useEffect, useState } from "react"
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Linking,
+  ScrollView,
+  Alert,
+  AppState,
+  type AppStateStatus,
+  Image,
+} from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { fetchAPI } from "@/lib/fetch"
 import { Ionicons } from "@expo/vector-icons"
 import { setupLocationTracking, stopLocationTracking, checkTrackingStatus } from "@/lib/location"
-import * as ImagePicker from "expo-image-picker";
+import * as ImagePicker from "expo-image-picker"
 import { uploadImageToCloudinary } from "@/lib/cloudinary"
+import React from "react"
 
 declare global {
   var tripId: string
@@ -36,6 +47,7 @@ interface TripDetails {
     contactNumber: string
     address: string
   }
+  hydrantPhotoUploaded?: boolean
 }
 
 export default function Trip() {
@@ -47,6 +59,9 @@ export default function Trip() {
   const [hasLocationPermission, setHasLocationPermission] = useState(false)
   const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState)
   const [trackingStatus, setTrackingStatus] = useState(false)
+  const [hydrantPhotoUploaded, setHydrantPhotoUploaded] = useState(false)
+  const [uploadingVideo, setUploadingVideo] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
 
   useEffect(() => {
     global.tripId = id
@@ -96,9 +111,10 @@ export default function Trip() {
     try {
       const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/reached-hydrant?id=${id}`, {
         method: "POST",
-        body: JSON.stringify({ photoUrl })
+        body: JSON.stringify({ photoUrl }),
       })
       if (response.success) {
+        setHydrantPhotoUploaded(true)
         Alert.alert("Success", "Hydrant reached status updated")
         fetchTripDetails()
       } else {
@@ -107,27 +123,30 @@ export default function Trip() {
     } catch (error) {
       console.error("Error updating trip status:", error)
       Alert.alert("Error", "Failed to update hydrant status. Please try again.")
+    } finally {
+      setUploadingImage(false)
     }
   }
 
   const pickImageFromCamera = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    const permission = await ImagePicker.requestCameraPermissionsAsync()
     if (permission.granted) {
-      let result = await ImagePicker.launchCameraAsync({
+      const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
         aspect: [4, 3],
         quality: 1,
-      });
+      })
 
-      console.log(result);
+      console.log(result)
 
       if (!result.canceled) {
-        const link = await uploadImageToCloudinary(result.assets[0]);
-        console.log("uploaded link=>", link);
-        handleReachedHydrant(link);
+        setUploadingImage(true)
+        const link = await uploadImageToCloudinary(result.assets[0])
+        console.log("uploaded link=>", link)
+        handleReachedHydrant(link)
       }
     }
-  };
+  }
 
   const handleAppStateChange = (nextAppState: AppStateStatus, tripId: string) => {
     setAppState(nextAppState)
@@ -159,6 +178,41 @@ export default function Trip() {
     }
     updateTrackingStatus()
   }, [])
+
+  const pickVideoFromCamera = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync()
+      if (permission.granted) {
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+          quality: 1,
+          videoMaxDuration: 30,
+        })
+
+        if (!result.canceled) {
+          setUploadingVideo(true)
+          const videoUrl = await uploadImageToCloudinary(result.assets[0])
+
+          const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/water-supply-video?id=${id}`, {
+            method: "POST",
+            body: JSON.stringify({ videoUrl }),
+          })
+
+          if (response.success) {
+            Alert.alert("Success", "Water supply video uploaded successfully")
+            fetchTripDetails()
+          } else {
+            throw new Error(response.error || "Failed to upload video")
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error uploading video:", error)
+      Alert.alert("Error", "Failed to upload video. Please try again.")
+    } finally {
+      setUploadingVideo(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -261,10 +315,36 @@ export default function Trip() {
       </ScrollView>
 
       <View className="flex-row justify-around p-4">
-        <TouchableOpacity className="bg-teal-500 p-4 rounded flex-1 mr-2" onPress={pickImageFromCamera}>
-          <Text className="text-white text-center font-bold">REACHED HYDRANT</Text>
-        </TouchableOpacity>
+        {!hydrantPhotoUploaded ? (
+          <TouchableOpacity 
+            className="bg-teal-500 p-4 rounded flex-1 mr-2" 
+            onPress={pickImageFromCamera} 
+            disabled={uploadingImage}
+          >
+            <Text className="text-white text-center font-bold">
+              {uploadingImage ? "UPLOADING..." : "REACHED HYDRANT"}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View className="flex-1 space-y-4">
+            <View className="flex-row items-center justify-center bg-green-100 p-4 rounded">
+              <Image source={require("@/assets/images/check.png")} style={{ width: 24, height: 24, marginRight: 8 }} />
+              <Text className="text-green-700 font-semibold">Hydrant Photo Uploaded</Text>
+            </View>
+
+            <TouchableOpacity
+              className="bg-pink-500 p-4 rounded"
+              onPress={pickVideoFromCamera}
+              disabled={uploadingVideo}
+            >
+              <Text className="text-white text-center font-bold">
+                {uploadingVideo ? "UPLOADING..." : "CAPTURE VIDEO AFTER WATER SUPPLY"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   )
 }
+
