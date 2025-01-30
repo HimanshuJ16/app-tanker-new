@@ -29,6 +29,8 @@ interface TripDetails {
   startTime: string | null
   endTime: string | null
   distance: number | null
+  photo: string | null
+  video: string | null
   booking: {
     id: string
     journeyDate: string
@@ -47,7 +49,6 @@ interface TripDetails {
     contactNumber: string
     address: string
   }
-  hydrantPhotoUploaded?: boolean
 }
 
 export default function Trip() {
@@ -59,7 +60,6 @@ export default function Trip() {
   const [hasLocationPermission, setHasLocationPermission] = useState(false)
   const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState)
   const [trackingStatus, setTrackingStatus] = useState(false)
-  const [hydrantPhotoUploaded, setHydrantPhotoUploaded] = useState(false)
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
 
@@ -114,7 +114,6 @@ export default function Trip() {
         body: JSON.stringify({ photoUrl }),
       })
       if (response.success) {
-        setHydrantPhotoUploaded(true)
         Alert.alert("Success", "Hydrant reached status updated")
         fetchTripDetails()
       } else {
@@ -315,7 +314,7 @@ export default function Trip() {
       </ScrollView>
 
       <View className="flex-row justify-around p-4">
-        {!hydrantPhotoUploaded ? (
+        {!tripDetails.photo ? (
           <TouchableOpacity 
             className="bg-teal-500 p-4 rounded flex-1 mr-2" 
             onPress={pickImageFromCamera} 

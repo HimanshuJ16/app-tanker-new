@@ -217,7 +217,7 @@ const Home = () => {
         </TouchableOpacity>
       )}
 
-      {item.trip.tripId && item.trip.status === 'ongoing' && (
+      {(item.trip.tripId && item.trip.status === 'ongoing' || item.trip.status === 'pickup' || item.trip.status === 'delivered') && (
         <TouchableOpacity
           className="bg-green-700 py-2 rounded mt-2 items-center"
           onPress={() => handleTrip(item.trip.tripId!)}
