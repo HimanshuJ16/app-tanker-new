@@ -305,7 +305,7 @@ export default function Trip() {
           </View>
         </View>
 
-        <View className="mb-6">
+        <View className="mb-4">
           <Text className="text-lg font-semibold">Location Tracking</Text>
           <Text>{hasLocationPermission ? "Enabled" : "Disabled"}</Text>
           <Text>App State: {appState}</Text>
@@ -326,20 +326,32 @@ export default function Trip() {
           </TouchableOpacity>
         ) : (
           <View className="flex-1 space-y-4">
-            <View className="flex-row items-center justify-center bg-green-100 p-4 rounded">
+            <View className="flex-row items-center justify-center bg-green-100 p-4 rounded mb-4">
               <Image source={require("@/assets/images/check.png")} style={{ width: 24, height: 24, marginRight: 8 }} />
-              <Text className="text-green-700 font-semibold">Hydrant Photo Uploaded</Text>
+              <Text className="text-green-700 font-semibold">
+                {!tripDetails.video ? "Photo Uploaded" : "Photo and Video Uploaded" }
+              </Text>
             </View>
 
-            <TouchableOpacity
-              className="bg-pink-500 p-4 rounded"
-              onPress={pickVideoFromCamera}
-              disabled={uploadingVideo}
-            >
-              <Text className="text-white text-center font-bold">
-                {uploadingVideo ? "UPLOADING..." : "CAPTURE VIDEO AFTER WATER SUPPLY"}
-              </Text>
-            </TouchableOpacity>
+            {!tripDetails.video ? (
+              <TouchableOpacity
+                className="bg-pink-500 p-4 rounded"
+                onPress={pickVideoFromCamera}
+                disabled={uploadingVideo}
+              >
+                <Text className="text-white text-center font-bold">
+                  {uploadingVideo ? "UPLOADING..." : "CAPTURE VIDEO ON WATER SUPPLY"}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                className="bg-orange-600 p-4 rounded"
+              >
+                <Text className="text-white text-center font-bold">
+                  VERIFY OTP
+                </Text>
+              </TouchableOpacity>
+            )}            
           </View>
         )}
       </View>
