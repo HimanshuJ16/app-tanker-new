@@ -16,7 +16,7 @@ import { fetchAPI } from "@/lib/fetch"
 import { Ionicons } from "@expo/vector-icons"
 import { setupLocationTracking, stopLocationTracking, checkTrackingStatus } from "@/lib/location"
 import * as ImagePicker from "expo-image-picker"
-import { uploadImageToCloudinary } from "@/lib/cloudinary"
+import { uploadToCloudinary } from "@/lib/cloudinary"
 import React from "react"
 
 declare global {
@@ -141,7 +141,7 @@ export default function Trip() {
 
       if (!result.canceled) {
         setUploadingImage(true)
-        const link = await uploadImageToCloudinary(result.assets[0])
+        const link = await uploadToCloudinary(result.assets[0])
         console.log("uploaded link=>", link)
         handleReachedHydrant(link)
       }
@@ -191,9 +191,9 @@ export default function Trip() {
 
         if (!result.canceled) {
           setUploadingVideo(true)
-          const videoUrl = await uploadImageToCloudinary(result.assets[0])
+          const videoUrl = await uploadToCloudinary(result.assets[0])
 
-          const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/water-supply-video?id=${id}`, {
+          const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/water-delivered?id=${id}`, {
             method: "POST",
             body: JSON.stringify({ videoUrl }),
           })

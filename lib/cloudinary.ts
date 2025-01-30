@@ -1,6 +1,6 @@
 const MAX_VIDEO_SIZE_MB = 100 // Maximum video size in MB
 
-export const uploadImageToCloudinary = async (obj: any) => {
+export const uploadToCloudinary = async (obj: any) => {
   const cloudName = "himanshujangir"
   const uploadPreset = "ml_default"
   const timestamp = Math.floor(Date.now() / 1000)
