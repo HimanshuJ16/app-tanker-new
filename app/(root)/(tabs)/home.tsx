@@ -104,9 +104,15 @@ const Home = () => {
   const handleReject = async (bookingId: string) => {
     try {
       setLoading(true);
+      const vehicleInfo = await SecureStore.getItemAsync('vehicleInfo');
+      if (!vehicleInfo) {
+        throw new Error('No vehicle info found');
+      }
+      const { vehicleId } = JSON.parse(vehicleInfo);
+
       const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/actions?id=${bookingId}`, {
         method: 'POST',
-        body: JSON.stringify({ action: 'reject' })
+        body: JSON.stringify({ action: 'reject', vehicleId })
       });
 
       if (response.success) {
@@ -185,7 +191,7 @@ const Home = () => {
         <Text className="text-sm">{item.customer.contactNumber}</Text>
       </View>
 
-      {item.status === 'approved' && !item.trip.tripId && (
+      {!item.trip.tripId && (
         <View className="flex-row justify-between mt-2">
           <TouchableOpacity
             className="flex-1 bg-green-500 py-2 rounded mr-1 items-center"
@@ -202,7 +208,7 @@ const Home = () => {
         </View>
       )}
 
-      {item.trip.tripId && item.trip.status === 'in_progress' && (
+      {item.trip.tripId && item.trip.status === 'accepted' && (
         <TouchableOpacity
           className="bg-green-500 py-2 rounded mt-2 items-center"
           onPress={() => handleStartTrip(item.trip.tripId!)}
@@ -229,7 +235,7 @@ const Home = () => {
         </TouchableOpacity>
       )}
 
-      {item.status === 'rejected' && (
+      {item.trip.status === 'rejected' && (
         <TouchableOpacity
           className="bg-red-300 py-2 rounded mt-2 items-center"
           disabled
