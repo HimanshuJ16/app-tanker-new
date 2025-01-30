@@ -17,6 +17,10 @@ import { Ionicons } from "@expo/vector-icons"
 import { setupLocationTracking, stopLocationTracking, checkTrackingStatus } from "@/lib/location"
 import * as ImagePicker from "expo-image-picker"
 import { uploadToCloudinary } from "@/lib/cloudinary"
+import ReactNativeModal from "react-native-modal"
+import InputField from "@/components/InputField"
+import CustomButton from "@/components/CustomButton"
+import { icons } from "@/constants"
 import React from "react"
 
 declare global {
@@ -62,6 +66,14 @@ export default function Trip() {
   const [trackingStatus, setTrackingStatus] = useState(false)
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [verification, setVerification] = useState({
+    state: "idle",
+    code: "",
+    error: null,
+  })
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [otpToken, setOtpToken] = useState<string | null>(null)
 
   useEffect(() => {
     global.tripId = id
@@ -213,6 +225,75 @@ export default function Trip() {
     }
   }
 
+  const handleSendOTP = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: tripDetails?.customer.contactNumber }),
+      });
+
+      console.log(response);
+  
+      if (response.success) {
+        setOtpToken(response.otpToken);
+        setVerification({ ...verification, state: 'pending' });
+      } else {
+        throw new Error(response.error || 'Failed to send OTP');
+      }
+    } catch (error) {
+      console.error('Error sending OTP:', error);
+      Alert.alert('Error', 'Failed to send OTP. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleVerifyOTP = async () => {
+    if (!otpToken) {
+      Alert.alert("Error", "OTP session expired. Please request a new OTP.");
+      return;
+    }
+  
+    if (!verification.code || verification.code.length !== 4) {
+      Alert.alert("Error", "Please enter a valid 4-digit OTP.");
+      return;
+    }
+  
+    try {
+      console.log({
+        phoneNumber: tripDetails?.customer.contactNumber,
+        otp: verification.code,
+        otpToken,
+        tripId: id,
+      });
+  
+      const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber: tripDetails?.customer.contactNumber,
+          otp: verification.code,
+          otpToken,
+          tripId: id,
+        }),
+      });
+  
+      if (response.success) {
+        setVerification({ ...verification, state: "success" });
+        fetchTripDetails();
+        setShowSuccessModal(true);
+        stopLocationTracking();
+      } else {
+        throw new Error(response.error || "Failed to verify OTP");
+      }
+    } catch (error: any) {
+      console.error("Error verifying OTP:", error);
+      setVerification({ ...verification, state: "error", error: error.message });
+    }
+  };
+  
   if (loading) {
     return (
       <SafeAreaView className="flex-1 bg-white justify-center items-center">
@@ -315,9 +396,9 @@ export default function Trip() {
 
       <View className="flex-row justify-around p-4">
         {!tripDetails.photo ? (
-          <TouchableOpacity 
-            className="bg-teal-500 p-4 rounded flex-1 mr-2" 
-            onPress={pickImageFromCamera} 
+          <TouchableOpacity
+            className="bg-teal-500 p-4 rounded flex-1 mr-2"
+            onPress={pickImageFromCamera}
             disabled={uploadingImage}
           >
             <Text className="text-white text-center font-bold">
@@ -329,33 +410,67 @@ export default function Trip() {
             <View className="flex-row items-center justify-center bg-green-100 p-4 rounded mb-4">
               <Image source={require("@/assets/images/check.png")} style={{ width: 24, height: 24, marginRight: 8 }} />
               <Text className="text-green-700 font-semibold">
-                {!tripDetails.video ? "Photo Uploaded" : "Photo and Video Uploaded" }
+                {!tripDetails.video ? "Photo Uploaded" : "Photo and Video Uploaded"}
               </Text>
             </View>
 
-            {!tripDetails.video ? (
+            {!tripDetails.video && (
               <TouchableOpacity
                 className="bg-pink-500 p-4 rounded"
                 onPress={pickVideoFromCamera}
                 disabled={uploadingVideo}
               >
                 <Text className="text-white text-center font-bold">
-                  {uploadingVideo ? "UPLOADING..." : "CAPTURE VIDEO ON WATER SUPPLY"}
+                  {uploadingVideo ? "UPLOADING..." : "UPLOAD VIDEO OF WATER SUPPLY"}
                 </Text>
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                className="bg-orange-600 p-4 rounded"
-              >
-                <Text className="text-white text-center font-bold">
-                  VERIFY OTP
-                </Text>
+            )}
+
+            {tripDetails.video && (
+              <TouchableOpacity className="bg-orange-600 p-4 rounded" onPress={handleSendOTP} disabled={isLoading}>
+                <Text className="text-white text-center font-bold">{isLoading ? "SENDING OTP..." : "SEND OTP FOR VERIFICATION"}</Text>
               </TouchableOpacity>
-            )}            
+            )}
           </View>
         )}
       </View>
+
+      <ReactNativeModal
+        isVisible={verification.state === "pending"}
+        onModalHide={() => {
+          if (verification.state === "success") {
+            setShowSuccessModal(true)
+          }
+        }}
+      >
+        <View className="bg-white px-7 py-9 rounded-2xl min-h-[300px]">
+          <Text className="font-JakartaExtraBold text-2xl mb-2">Verification</Text>
+          <Text className="font-Jakarta mb-5">We've sent a verification code to customer phone number.</Text>
+          <InputField
+            label={"Code"}
+            icon={icons.lock}
+            placeholder={"1234"}
+            value={verification.code}
+            keyboardType="numeric"
+            onChangeText={(code) => setVerification({ ...verification, code })}
+          />
+          {verification.error && <Text className="text-red-500 text-sm mt-1">{verification.error}</Text>}
+          <CustomButton
+            title={isLoading ? "Verifying..." : "Verify OTP"}
+            onPress={handleVerifyOTP}
+            className="mt-5 bg-success-500"
+            disabled={isLoading}
+          />
+        </View>
+      </ReactNativeModal>
+
+      <ReactNativeModal isVisible={showSuccessModal} onBackdropPress={() => setShowSuccessModal(false)}>
+        <View className="bg-white px-7 py-9 rounded-2xl">
+          <Text className="font-JakartaExtraBold text-2xl mb-2">Success</Text>
+          <Text className="font-Jakarta mb-5">Trip completed successfully.</Text>
+          <CustomButton title="Close" onPress={() => router.push(`/(root)/(tabs)/home`)} className="mt-5 bg-success-500" />
+        </View>
+      </ReactNativeModal>
     </SafeAreaView>
   )
 }
-
