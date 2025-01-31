@@ -227,48 +227,48 @@ export default function Trip() {
 
   const handleSendOTP = async () => {
     try {
-      setIsLoading(true);
+      setIsLoading(true)
       const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phoneNumber: tripDetails?.customer.contactNumber }),
-      });
+      })
 
-      console.log(response);
-  
+      console.log(response)
+
       if (response.success) {
-        setOtpToken(response.otpToken);
-        setVerification({ ...verification, state: 'pending' });
+        setOtpToken(response.otpToken)
+        setVerification({ ...verification, state: "pending" })
       } else {
-        throw new Error(response.error || 'Failed to send OTP');
+        throw new Error(response.error || "Failed to send OTP")
       }
     } catch (error) {
-      console.error('Error sending OTP:', error);
-      Alert.alert('Error', 'Failed to send OTP. Please try again.');
+      console.error("Error sending OTP:", error)
+      Alert.alert("Error", "Failed to send OTP. Please try again.")
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
-  
+  }
+
   const handleVerifyOTP = async () => {
     if (!otpToken) {
-      Alert.alert("Error", "OTP session expired. Please request a new OTP.");
-      return;
+      Alert.alert("Error", "OTP session expired. Please request a new OTP.")
+      return
     }
-  
+
     if (!verification.code || verification.code.length !== 4) {
-      Alert.alert("Error", "Please enter a valid 4-digit OTP.");
-      return;
+      Alert.alert("Error", "Please enter a valid 4-digit OTP.")
+      return
     }
-  
+
     try {
       console.log({
         phoneNumber: tripDetails?.customer.contactNumber,
         otp: verification.code,
         otpToken,
         tripId: id,
-      });
-  
+      })
+
       const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -278,22 +278,22 @@ export default function Trip() {
           otpToken,
           tripId: id,
         }),
-      });
-  
+      })
+
       if (response.success) {
-        setVerification({ ...verification, state: "success" });
-        fetchTripDetails();
-        setShowSuccessModal(true);
-        stopLocationTracking();
+        setVerification({ ...verification, state: "success" })
+        fetchTripDetails()
+        setShowSuccessModal(true)
+        stopLocationTracking()
       } else {
-        throw new Error(response.error || "Failed to verify OTP");
+        throw new Error(response.error || "Failed to verify OTP")
       }
     } catch (error: any) {
-      console.error("Error verifying OTP:", error);
-      setVerification({ ...verification, state: "error", error: error.message });
+      console.error("Error verifying OTP:", error)
+      setVerification({ ...verification, state: "error", error: error.message })
     }
-  };
-  
+  }
+
   if (loading) {
     return (
       <SafeAreaView className="flex-1 bg-white justify-center items-center">
@@ -392,6 +392,11 @@ export default function Trip() {
           <Text>App State: {appState}</Text>
           <Text>Tracking: {trackingStatus ? "Active" : "Inactive"}</Text>
         </View>
+
+        <View className="mb-4">
+          <Text className="text-lg font-semibold">Distance Traveled</Text>
+          <Text>{tripDetails?.distance !== null ? `${tripDetails.distance.toFixed(2)} km` : "Calculating..."}</Text>
+        </View>
       </ScrollView>
 
       <View className="flex-row justify-around p-4">
@@ -428,7 +433,9 @@ export default function Trip() {
 
             {tripDetails.video && (
               <TouchableOpacity className="bg-orange-600 p-4 rounded" onPress={handleSendOTP} disabled={isLoading}>
-                <Text className="text-white text-center font-bold">{isLoading ? "SENDING OTP..." : "SEND OTP FOR VERIFICATION"}</Text>
+                <Text className="text-white text-center font-bold">
+                  {isLoading ? "SENDING OTP..." : "SEND OTP FOR VERIFICATION"}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -465,10 +472,15 @@ export default function Trip() {
       </ReactNativeModal>
 
       <ReactNativeModal isVisible={showSuccessModal} onBackdropPress={() => setShowSuccessModal(false)}>
-        <View className="bg-white px-7 py-9 rounded-2xl">
-          <Text className="font-JakartaExtraBold text-2xl mb-2">Success</Text>
-          <Text className="font-Jakarta mb-5">Trip completed successfully.</Text>
-          <CustomButton title="Close" onPress={() => router.push(`/(root)/(tabs)/home`)} className="mt-5 bg-success-500" />
+        <View className="bg-white px-7 py-9 rounded-2xl items-center">
+          <Image source={require("@/assets/images/check.png")} className="w-20 h-20 mr-2" />
+          <Text className="font-JakartaExtraBold text-3xl mt-3">Success</Text>
+          <Text className="font-Jakarta text-center mt-2 mb-4">Trip completed successfully.</Text>
+          <CustomButton 
+            title="Close" 
+            onPress={() => router.push(`/(root)/(tabs)/home`)} 
+            className="mt-5 bg-success-500 text-white"
+          />
         </View>
       </ReactNativeModal>
     </SafeAreaView>

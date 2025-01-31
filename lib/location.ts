@@ -47,7 +47,7 @@ export const setupLocationTracking = async (tripId: string): Promise<boolean> =>
     }
 
     await Location.startLocationUpdatesAsync(LOCATION_TRACKING, {
-      accuracy: Location.Accuracy.Balanced,
+      accuracy: Location.Accuracy.High,
       timeInterval: 10000,
       distanceInterval: 10,
       foregroundService: {
