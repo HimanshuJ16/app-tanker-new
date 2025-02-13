@@ -177,7 +177,7 @@ export default function CombinedAuth() {
             placeholder="Enter vehicle number"
             icon={icons.person}
             value={form.vehicleNumber}
-            onChangeText={(value) => setForm({ ...form, vehicleNumber: value })}
+            onChangeText={(value) => setForm({ ...form, vehicleNumber: value.toUpperCase() })}
           />
           <CustomButton
             title={isLoading ? "Processing..." : "Continue"}
@@ -238,7 +238,10 @@ export default function CombinedAuth() {
             </Text>
             <CustomButton
               title="Browse Home"
-              onPress={() => router.push(`/(root)/(tabs)/home`)}
+              onPress={() => {
+                setShowSuccessModal(false); // Close the modal
+                router.push(`/(root)/(tabs)/home`);
+              }}
               className="mt-5"
             />
           </View>

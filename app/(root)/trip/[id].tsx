@@ -478,7 +478,10 @@ export default function Trip() {
           <Text className="font-Jakarta text-center mt-2 mb-4">Trip completed successfully.</Text>
           <CustomButton 
             title="Close" 
-            onPress={() => router.push(`/(root)/(tabs)/home`)} 
+            onPress={() => {
+              setShowSuccessModal(false);
+              router.push(`/(root)/(tabs)/home`)}
+            } 
             className="mt-5 bg-success-500 text-white"
           />
         </View>
