@@ -73,7 +73,7 @@ export default function Trip() {
   })
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [otpToken, setOtpToken] = useState<string | null>(null)
+  const [verificationId, setVerificationId] = useState<string | null>(null) // New state for verificationId
 
   useEffect(() => {
     global.tripId = id
@@ -237,7 +237,7 @@ export default function Trip() {
       console.log(response)
 
       if (response.success) {
-        setOtpToken(response.otpToken)
+        setVerificationId(response.verificationId) // Store the verificationId
         setVerification({ ...verification, state: "pending" })
       } else {
         throw new Error(response.error || "Failed to send OTP")
@@ -251,8 +251,8 @@ export default function Trip() {
   }
 
   const handleVerifyOTP = async () => {
-    if (!otpToken) {
-      Alert.alert("Error", "OTP session expired. Please request a new OTP.")
+    if (!verificationId) {
+      Alert.alert("Error", "OTP verification ID not found. Please request a new OTP.")
       return
     }
 
@@ -263,9 +263,8 @@ export default function Trip() {
 
     try {
       console.log({
-        phoneNumber: tripDetails?.customer.contactNumber,
+        verificationId, // Use the stored verificationId
         otp: verification.code,
-        otpToken,
         tripId: id,
       })
 
@@ -273,9 +272,8 @@ export default function Trip() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phoneNumber: tripDetails?.customer.contactNumber,
+          verificationId, // Pass the verificationId
           otp: verification.code,
-          otpToken,
           tripId: id,
         }),
       })
