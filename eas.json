@@ -15,7 +15,8 @@
       },
       "env": {
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_a2Vlbi1zZWFzbmFpbC05OS5jbGVyay5hY2NvdW50cy5kZXYk",
-        "EXPO_PUBLIC_API_URL": "https://ten-sage.vercel.app/api"
+        "EXPO_PUBLIC_API_URL": "https://ten-sage.vercel.app/api",
+        "EXPO_PUBLIC_SOCKET_SERVER_URL": "https://tracking-server-glwu.onrender.com"
       }
     },
     "preview": {
@@ -24,7 +25,8 @@
       },
       "env": {
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_a2Vlbi1zZWFzbmFpbC05OS5jbGVyay5hY2NvdW50cy5kZXYk",
-        "EXPO_PUBLIC_API_URL": "https://ten-sage.vercel.app/api"
+        "EXPO_PUBLIC_API_URL": "https://ten-sage.vercel.app/api",
+        "EXPO_PUBLIC_SOCKET_SERVER_URL": "https://tracking-server-glwu.onrender.com"
       }
     },
     "preview2": {
@@ -33,21 +35,24 @@
       },
       "env": {
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_a2Vlbi1zZWFzbmFpbC05OS5jbGVyay5hY2NvdW50cy5kZXYk",
-        "EXPO_PUBLIC_API_URL": "https://ten-sage.vercel.app/api"
+        "EXPO_PUBLIC_API_URL": "https://ten-sage.vercel.app/api",
+        "EXPO_PUBLIC_SOCKET_SERVER_URL": "https://tracking-server-glwu.onrender.com"
       }
     },
     "preview3": {
       "developmentClient": true,
       "env": {
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_a2Vlbi1zZWFzbmFpbC05OS5jbGVyay5hY2NvdW50cy5kZXYk",
-        "EXPO_PUBLIC_API_URL": "https://ten-sage.vercel.app/api"
+        "EXPO_PUBLIC_API_URL": "https://ten-sage.vercel.app/api",
+        "EXPO_PUBLIC_SOCKET_SERVER_URL": "https://tracking-server-glwu.onrender.com"
       }
     },
     "preview4": {
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_a2Vlbi1zZWFzbmFpbC05OS5jbGVyay5hY2NvdW50cy5kZXYk",
-        "EXPO_PUBLIC_API_URL": "https://ten-sage.vercel.app/api"
+        "EXPO_PUBLIC_API_URL": "https://ten-sage.vercel.app/api",
+        "EXPO_PUBLIC_SOCKET_SERVER_URL": "https://tracking-server-glwu.onrender.com"
       }
     },
     "production": {}

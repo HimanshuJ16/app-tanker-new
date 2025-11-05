@@ -11,31 +11,58 @@ export interface ExtendedLocationOptions extends Location.LocationOptions {
   }
 }
 
+/**
+ * Sends the location update to two places:
+ * 1. The main API to be saved in the database (for persistence, distance calculation).
+ * 2. The WebSocket broadcast server (for live tracking on the web).
+ */
 export const sendLocationUpdate = async (location: Location.LocationObject, tripId: string) => {
-  try {
-    const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/location?id=${tripId}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        altitude: location.coords.altitude,
-        speed: location.coords.speed,
-        heading: location.coords.heading,
-      }),
-    })
+  const locationData = {
+    latitude: location.coords.latitude,
+    longitude: location.coords.longitude,
+    altitude: location.coords.altitude,
+    speed: location.coords.speed,
+    heading: location.coords.heading,
+  };
 
-    if (response && response.success) {
-      console.log("Location updated successfully")
+  // 1. Send to main API for database persistence
+  try {
+    const dbResponse = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/location?id=${tripId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(locationData),
+    });
+
+    if (dbResponse && dbResponse.success) {
+      console.log("Location saved to DB successfully");
     } else {
-      console.error("Failed to update location:", response?.error || "Unknown error")
+      console.error("Failed to save location to DB:", dbResponse?.error || "Unknown error");
     }
   } catch (error) {
-    console.error("Error sending location update:", error)
+    console.error("Error saving location to DB:", error);
   }
-}
+
+  // 2. Send to WebSocket server to broadcast live
+  try {
+    // We use standard fetch here instead of fetchAPI because it's a different server
+    const broadcastResponse = await fetch(`${process.env.EXPO_PUBLIC_SOCKET_SERVER_URL}/broadcast/location`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tripId: tripId,
+        location: locationData,
+      }),
+    });
+    
+    if (broadcastResponse.ok) {
+      console.log("Location broadcasted successfully");
+    } else {
+      console.error("Failed to broadcast location:", await broadcastResponse.text());
+    }
+  } catch (error) {
+    console.error("Error broadcasting location:", error);
+  }
+};
 
 export const setupLocationTracking = async (tripId: string): Promise<boolean> => {
   try {
@@ -48,8 +75,8 @@ export const setupLocationTracking = async (tripId: string): Promise<boolean> =>
 
     await Location.startLocationUpdatesAsync(LOCATION_TRACKING, {
       accuracy: Location.Accuracy.High,
-      timeInterval: 10000,
-      distanceInterval: 10,
+      timeInterval: 10000, // 10 seconds
+      distanceInterval: 10,  // 10 meters
       foregroundService: {
         notificationTitle: "Trip Tracking Active",
         notificationBody: "Your location is being tracked for the current trip",
@@ -81,6 +108,7 @@ export const checkTrackingStatus = async (): Promise<boolean> => {
   return isRegistered && isTracking
 }
 
+// This TaskManager definition is the core of the background tracking
 TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
   if (error) {
     console.error("Error in background location task:", error)
@@ -89,9 +117,14 @@ TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
   if (data) {
     const { locations } = data as { locations: Location.LocationObject[] }
     if (locations && locations.length > 0) {
-      console.log("Background location update:", locations[0])
-      await sendLocationUpdate(locations[0], global.tripId)
+      // global.tripId is set in the `[id].tsx` component.
+      // This is how the background task knows which trip to update.
+      if (global.tripId) {
+        console.log("Background location update:", locations[0].coords);
+        await sendLocationUpdate(locations[0], global.tripId);
+      } else {
+        console.warn("Background task running but global.tripId is not set.");
+      }
     }
   }
 })
-
