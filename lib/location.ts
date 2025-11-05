@@ -12,9 +12,9 @@ export interface ExtendedLocationOptions extends Location.LocationOptions {
 }
 
 /**
- * Sends the location update to two places:
- * 1. The main API to be saved in the database (for persistence, distance calculation).
- * 2. The WebSocket broadcast server (for live tracking on the web).
+ * Sends the location update to ONE place:
+ * 1. The WebSocket broadcast server (for live tracking).
+ * The socket server will then be responsible for saving to the DB.
  */
 export const sendLocationUpdate = async (location: Location.LocationObject, tripId: string) => {
   const locationData = {
@@ -25,26 +25,9 @@ export const sendLocationUpdate = async (location: Location.LocationObject, trip
     heading: location.coords.heading,
   };
 
-  // 1. Send to main API for database persistence
+  // 1. Send to WebSocket server to broadcast live
   try {
-    const dbResponse = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/location?id=${tripId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(locationData),
-    });
-
-    if (dbResponse && dbResponse.success) {
-      console.log("Location saved to DB successfully");
-    } else {
-      console.error("Failed to save location to DB:", dbResponse?.error || "Unknown error");
-    }
-  } catch (error) {
-    console.error("Error saving location to DB:", error);
-  }
-
-  // 2. Send to WebSocket server to broadcast live
-  try {
-    // We use standard fetch here instead of fetchAPI because it's a different server
+    // We use standard fetch here because it's a different server
     const broadcastResponse = await fetch(`${process.env.EXPO_PUBLIC_SOCKET_SERVER_URL}/broadcast/location`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -118,7 +101,6 @@ TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
     const { locations } = data as { locations: Location.LocationObject[] }
     if (locations && locations.length > 0) {
       // global.tripId is set in the `[id].tsx` component.
-      // This is how the background task knows which trip to update.
       if (global.tripId) {
         console.log("Background location update:", locations[0].coords);
         await sendLocationUpdate(locations[0], global.tripId);

@@ -22,10 +22,15 @@ import InputField from "@/components/InputField"
 import CustomButton from "@/components/CustomButton"
 import { icons } from "@/constants"
 import React from "react"
+import * as Location from "expo-location" // Import expo-location
+import { calculateDistance } from "@/lib/distance" // Import the new distance calculator
 
 declare global {
   var tripId: string
 }
+
+// Define the radius (in kilometers) for the geofence check
+const GEOFENCE_RADIUS_KM = 0.05 // 50 meters
 
 interface TripDetails {
   tripId: string
@@ -43,10 +48,14 @@ interface TripDetails {
   hydrant: {
     name: string
     address: string
+    latitude: number  // <-- REQUIRED: Must be provided by your API
+    longitude: number // <-- REQUIRED: Must be provided by your API
   }
   destination: {
     name: string
     address: string
+    latitude: number  // <-- REQUIRED: Must be provided by your API
+    longitude: number // <-- REQUIRED: Must be provided by your API
   }
   customer: {
     name: string
@@ -66,6 +75,7 @@ export default function Trip() {
   const [trackingStatus, setTrackingStatus] = useState(false)
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [isVerifyingLocation, setIsVerifyingLocation] = useState(false) // New loading state
   const [verification, setVerification] = useState({
     state: "idle",
     code: "",
@@ -95,6 +105,11 @@ export default function Trip() {
 
       if (response && response.success) {
         setTripDetails(response.trip)
+         // Check if API is sending coordinates
+        if (!response.trip?.hydrant?.latitude || !response.trip?.destination?.latitude) {
+            Alert.alert("API Error", "Location coordinates for hydrant or destination are missing. Please contact support.")
+            setError("Missing location coordinates from API.")
+        }
       } else {
         throw new Error(response?.error || "Failed to fetch trip details")
       }
@@ -105,6 +120,56 @@ export default function Trip() {
       setLoading(false)
     }
   }
+
+  // --- NEW FUNCTION: Check proximity to a target ---
+  const checkLocationProximity = async (
+    target: { latitude: number; longitude: number },
+    targetName: string
+  ): Promise<boolean> => {
+    setIsVerifyingLocation(true)
+    try {
+      // 1. Get high-accuracy current location
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "Location permission is required to verify your position.")
+        return false
+      }
+
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      })
+
+      const { latitude: currentLat, longitude: currentLon } = currentLocation.coords
+
+      // 2. Calculate distance
+      const distance = calculateDistance(
+        currentLat,
+        currentLon,
+        target.latitude,
+        target.longitude
+      )
+
+      // 3. Compare distance with radius
+      if (distance <= GEOFENCE_RADIUS_KM) {
+        return true // User is within the radius
+      } else {
+        Alert.alert(
+          "Location Not Correct",
+          `You must be within 50 meters of the ${targetName} to perform this action. You are currently ~${(
+            distance * 1000
+          ).toFixed(0)} meters away.`
+        )
+        return false // User is outside the radius
+      }
+    } catch (error) {
+      console.error("Error checking location proximity:", error)
+      Alert.alert("Location Error", "Could not verify your current location. Please try again.")
+      return false
+    } finally {
+      setIsVerifyingLocation(false)
+    }
+  }
+
 
   const handleOpenLocation = (address: string) => {
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
@@ -139,11 +204,22 @@ export default function Trip() {
     }
   }
 
+  // --- UPDATED FUNCTION ---
   const pickImageFromCamera = async () => {
+    if (!tripDetails) return
+
+    // 1. Check location *before* opening camera
+    const isAtHydrant = await checkLocationProximity(tripDetails.hydrant, "hydrant")
+    
+    if (!isAtHydrant) {
+      return // Stop if not at location
+    }
+
+    // 2. Proceed with camera if check passed
     const permission = await ImagePicker.requestCameraPermissionsAsync()
     if (permission.granted) {
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ["images"],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         aspect: [4, 3],
         quality: 1,
       })
@@ -190,7 +266,18 @@ export default function Trip() {
     updateTrackingStatus()
   }, [])
 
+  // --- UPDATED FUNCTION ---
   const pickVideoFromCamera = async () => {
+    if (!tripDetails) return;
+
+    // 1. Check location *before* opening camera
+    const isAtDestination = await checkLocationProximity(tripDetails.destination, "destination");
+    
+    if (!isAtDestination) {
+      return; // Stop if not at location
+    }
+
+    // 2. Proceed with camera if check passed
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync()
       if (permission.granted) {
@@ -225,7 +312,16 @@ export default function Trip() {
     }
   }
 
+  // --- UPDATED FUNCTION ---
   const handleSendOTP = async () => {
+    // Note: You might also want to geofence the OTP sending
+    if (!tripDetails) return;
+    const isAtDestination = await checkLocationProximity(tripDetails.destination, "destination");
+    if (!isAtDestination) {
+        Alert.alert("Location Not Correct", "You must be at the destination to send the OTP.");
+        return;
+    }
+
     try {
       setIsLoading(true)
       const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/send-otp`, {
@@ -282,7 +378,7 @@ export default function Trip() {
         setVerification({ ...verification, state: "success" })
         fetchTripDetails()
         setShowSuccessModal(true)
-        stopLocationTracking()
+        stopLocationTracking() // Stop tracking once trip is complete
       } else {
         throw new Error(response.error || "Failed to verify OTP")
       }
@@ -322,6 +418,20 @@ export default function Trip() {
     )
   }
 
+  // Helper text for button loading state
+  const getHydrantButtonText = () => {
+    if (isVerifyingLocation) return "CHECKING LOCATION...";
+    if (uploadingImage) return "UPLOADING...";
+    return "REACHED HYDRANT";
+  };
+
+  const getVideoUploadButtonText = () => {
+    if (isVerifyingLocation) return "CHECKING LOCATION...";
+    if (uploadingVideo) return "UPLOADING...";
+    return "UPLOAD VIDEO OF WATER SUPPLY";
+  };
+
+
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="bg-blue-600 p-4 flex-row items-center">
@@ -339,7 +449,7 @@ export default function Trip() {
 
         <View className="mb-6">
           <Text className="text-gray-600 text-sm">Journey Date</Text>
-          <Text className="text-gray-800">{tripDetails.booking.journeyDate}</Text>
+          <Text className="text-gray-800">{new Date(tripDetails.booking.journeyDate).toLocaleDateString()}</Text>
         </View>
 
         <View className="bg-gray-200 p-2 mb-4">
@@ -402,10 +512,10 @@ export default function Trip() {
           <TouchableOpacity
             className="bg-teal-500 p-4 rounded flex-1 mr-2"
             onPress={pickImageFromCamera}
-            disabled={uploadingImage}
+            disabled={uploadingImage || isVerifyingLocation} // Disable on location check
           >
             <Text className="text-white text-center font-bold">
-              {uploadingImage ? "UPLOADING..." : "REACHED HYDRANT"}
+              {getHydrantButtonText()}
             </Text>
           </TouchableOpacity>
         ) : (
@@ -421,18 +531,21 @@ export default function Trip() {
               <TouchableOpacity
                 className="bg-pink-500 p-4 rounded"
                 onPress={pickVideoFromCamera}
-                disabled={uploadingVideo}
+                disabled={uploadingVideo || isVerifyingLocation} // Disable on location check
               >
                 <Text className="text-white text-center font-bold">
-                  {uploadingVideo ? "UPLOADING..." : "UPLOAD VIDEO OF WATER SUPPLY"}
+                  {getVideoUploadButtonText()}
                 </Text>
               </TouchableOpacity>
             )}
 
             {tripDetails.video && (
-              <TouchableOpacity className="bg-orange-600 p-4 rounded" onPress={handleSendOTP} disabled={isLoading}>
+              <TouchableOpacity className="bg-orange-600 p-4 rounded" 
+                onPress={handleSendOTP} 
+                disabled={isLoading || isVerifyingLocation} // Disable on location check
+              >
                 <Text className="text-white text-center font-bold">
-                  {isLoading ? "SENDING OTP..." : "SEND OTP FOR VERIFICATION"}
+                  {isLoading ? "SENDING OTP..." : (isVerifyingLocation ? "CHECKING LOCATION..." : "SEND OTP FOR VERIFICATION")}
                 </Text>
               </TouchableOpacity>
             )}
