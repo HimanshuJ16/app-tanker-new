@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react" // Import useRef
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   AppState,
   type AppStateStatus,
   Image,
+  ActivityIndicator, // Import ActivityIndicator
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useLocalSearchParams, useRouter } from "expo-router"
@@ -23,7 +24,8 @@ import CustomButton from "@/components/CustomButton"
 import { icons } from "@/constants"
 import React from "react"
 import * as Location from "expo-location" // Import expo-location
-import { calculateDistance } from "@/lib/distance" // Import the new distance calculator
+import { calculateDistance } from "@/lib/distance" // Import the distance calculator
+import ViewShot from "react-native-view-shot" // Import ViewShot
 
 declare global {
   var tripId: string
@@ -64,6 +66,11 @@ interface TripDetails {
   }
 }
 
+interface ImageStampDetails {
+  asset: ImagePicker.ImagePickerAsset;
+  location: Location.LocationObject;
+}
+
 export default function Trip() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const [tripDetails, setTripDetails] = useState<TripDetails | null>(null)
@@ -75,7 +82,12 @@ export default function Trip() {
   const [trackingStatus, setTrackingStatus] = useState(false)
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
-  const [isVerifyingLocation, setIsVerifyingLocation] = useState(false) // New loading state
+  const [isVerifyingLocation, setIsVerifyingLocation] = useState(false)
+  
+  // State for the image stamping modal
+  const [imageToStamp, setImageToStamp] = useState<ImageStampDetails | null>(null);
+  const viewShotRef = useRef<ViewShot>(null);
+
   const [verification, setVerification] = useState({
     state: "idle",
     code: "",
@@ -83,7 +95,7 @@ export default function Trip() {
   })
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [verificationId, setVerificationId] = useState<string | null>(null) // New state for verificationId
+  const [verificationId, setVerificationId] = useState<string | null>(null)
 
   useEffect(() => {
     global.tripId = id
@@ -121,18 +133,16 @@ export default function Trip() {
     }
   }
 
-  // --- NEW FUNCTION: Check proximity to a target ---
   const checkLocationProximity = async (
     target: { latitude: number; longitude: number },
     targetName: string
-  ): Promise<boolean> => {
+  ): Promise<Location.LocationObject | null> => {
     setIsVerifyingLocation(true)
     try {
-      // 1. Get high-accuracy current location
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== "granted") {
         Alert.alert("Permission Denied", "Location permission is required to verify your position.")
-        return false
+        return null
       }
 
       const currentLocation = await Location.getCurrentPositionAsync({
@@ -140,8 +150,6 @@ export default function Trip() {
       })
 
       const { latitude: currentLat, longitude: currentLon } = currentLocation.coords
-
-      // 2. Calculate distance
       const distance = calculateDistance(
         currentLat,
         currentLon,
@@ -149,9 +157,8 @@ export default function Trip() {
         target.longitude
       )
 
-      // 3. Compare distance with radius
       if (distance <= GEOFENCE_RADIUS_KM) {
-        return true // User is within the radius
+        return currentLocation 
       } else {
         Alert.alert(
           "Location Not Correct",
@@ -159,12 +166,12 @@ export default function Trip() {
             distance * 1000
           ).toFixed(0)} meters away.`
         )
-        return false // User is outside the radius
+        return null 
       }
     } catch (error) {
       console.error("Error checking location proximity:", error)
       Alert.alert("Location Error", "Could not verify your current location. Please try again.")
-      return false
+      return null
     } finally {
       setIsVerifyingLocation(false)
     }
@@ -209,9 +216,9 @@ export default function Trip() {
     if (!tripDetails) return
 
     // 1. Check location *before* opening camera
-    const isAtHydrant = await checkLocationProximity(tripDetails.hydrant, "hydrant")
+    const location = await checkLocationProximity(tripDetails.hydrant, "hydrant")
     
-    if (!isAtHydrant) {
+    if (!location) {
       return // Stop if not at location
     }
 
@@ -224,16 +231,56 @@ export default function Trip() {
         quality: 1,
       })
 
-      console.log(result)
-
-      if (!result.canceled) {
-        setUploadingImage(true)
-        const link = await uploadToCloudinary(result.assets[0])
-        console.log("uploaded link=>", link)
-        handleReachedHydrant(link)
+      if (result.canceled) {
+        return;
       }
+
+      // 3. Set image to be stamped, which opens the modal
+      setImageToStamp({ asset: result.assets[0], location: location });
     }
   }
+
+  // --- NEW FUNCTION: To handle the stamped image upload ---
+  const handleConfirmAndUploadImage = async () => {
+    if (!viewShotRef.current || !imageToStamp) return;
+
+    setUploadingImage(true); // Show loading indicator
+    
+    try {
+      // 1. Capture the ViewShot component as a URI
+      let uri: string | undefined;
+      if (viewShotRef.current && typeof viewShotRef.current.capture === "function") {
+        uri = await viewShotRef.current.capture();
+      } else {
+        throw new Error("ViewShot ref or capture method is undefined.");
+      }
+
+      // 2. Create a fake asset object for Cloudinary
+      const stampedAsset = {
+        ...imageToStamp.asset,
+        uri: uri, // Use the new captured URI
+        // We need to fake the type for cloudinary upload
+        type: 'image/jpeg', 
+      };
+
+      // 3. Upload the *stamped* image
+      const link = await uploadToCloudinary(stampedAsset);
+      console.log("Uploaded stamped image link =>", link);
+      
+      // 4. Send link to our backend
+      await handleReachedHydrant(link);
+
+    } catch (error) {
+      console.error("Error capturing or uploading stamped image:", error);
+      Alert.alert("Upload Error", "Failed to upload the stamped image.");
+      setUploadingImage(false); // Hide loading on error
+    } finally {
+      // 5. Close the modal
+      setImageToStamp(null);
+      // uploadingImage state is reset inside handleReachedHydrant
+    }
+  };
+
 
   const handleAppStateChange = (nextAppState: AppStateStatus, tripId: string) => {
     setAppState(nextAppState)
@@ -266,25 +313,21 @@ export default function Trip() {
     updateTrackingStatus()
   }, [])
 
-  // --- UPDATED FUNCTION ---
   const pickVideoFromCamera = async () => {
     if (!tripDetails) return;
 
-    // 1. Check location *before* opening camera
-    const isAtDestination = await checkLocationProximity(tripDetails.destination, "destination");
-    
-    if (!isAtDestination) {
-      return; // Stop if not at location
+    const location = await checkLocationProximity(tripDetails.destination, "destination");
+    if (!location) {
+      return; 
     }
 
-    // 2. Proceed with camera if check passed
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync()
       if (permission.granted) {
         const result = await ImagePicker.launchCameraAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Videos,
           quality: 1,
-          videoMaxDuration: 30,
+          videoMaxDuration: 15,
         })
 
         if (!result.canceled) {
@@ -312,12 +355,11 @@ export default function Trip() {
     }
   }
 
-  // --- UPDATED FUNCTION ---
   const handleSendOTP = async () => {
-    // Note: You might also want to geofence the OTP sending
     if (!tripDetails) return;
-    const isAtDestination = await checkLocationProximity(tripDetails.destination, "destination");
-    if (!isAtDestination) {
+    
+    const location = await checkLocationProximity(tripDetails.destination, "destination");
+    if (!location) {
         Alert.alert("Location Not Correct", "You must be at the destination to send the OTP.");
         return;
     }
@@ -333,7 +375,7 @@ export default function Trip() {
       console.log(response)
 
       if (response.success) {
-        setVerificationId(response.verificationId) // Store the verificationId
+        setVerificationId(response.verificationId) 
         setVerification({ ...verification, state: "pending" })
       } else {
         throw new Error(response.error || "Failed to send OTP")
@@ -359,7 +401,7 @@ export default function Trip() {
 
     try {
       console.log({
-        verificationId, // Use the stored verificationId
+        verificationId, 
         otp: verification.code,
         tripId: id,
       })
@@ -368,7 +410,7 @@ export default function Trip() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          verificationId, // Pass the verificationId
+          verificationId, 
           otp: verification.code,
           tripId: id,
         }),
@@ -378,7 +420,7 @@ export default function Trip() {
         setVerification({ ...verification, state: "success" })
         fetchTripDetails()
         setShowSuccessModal(true)
-        stopLocationTracking() // Stop tracking once trip is complete
+        stopLocationTracking() 
       } else {
         throw new Error(response.error || "Failed to verify OTP")
       }
@@ -418,10 +460,9 @@ export default function Trip() {
     )
   }
 
-  // Helper text for button loading state
   const getHydrantButtonText = () => {
     if (isVerifyingLocation) return "CHECKING LOCATION...";
-    if (uploadingImage) return "UPLOADING...";
+    if (uploadingImage) return "UPLOADING..."; // This state is now set in handleConfirmAndUpload
     return "REACHED HYDRANT";
   };
 
@@ -553,6 +594,58 @@ export default function Trip() {
         )}
       </View>
 
+      {/* --- NEW MODAL FOR IMAGE STAMPING --- */}
+      <ReactNativeModal isVisible={imageToStamp !== null}>
+        <View className="bg-white p-4 rounded-lg">
+          <Text className="text-lg font-bold mb-4">Confirm Image</Text>
+          
+          <ViewShot
+            ref={viewShotRef}
+            options={{ format: "jpg", quality: 0.9 }}
+            // className="mb-4"
+          >
+            {/* The Image */}
+            <Image
+              source={{ uri: imageToStamp?.asset.uri }}
+              className="w-full h-64"
+              resizeMode="contain"
+            />
+            {/* The Text Overlay */}
+            <View className="absolute top-2 left-2 bg-black/50 p-2 rounded">
+              <Text className="text-white text-xs">
+                {`Lat: ${imageToStamp?.location.coords.latitude.toFixed(5)}`}
+              </Text>
+              <Text className="text-white text-xs">
+                {`Lon: ${imageToStamp?.location.coords.longitude.toFixed(5)}`}
+              </Text>
+              <Text className="text-white text-xs">
+                {new Date(
+                  imageToStamp?.location.timestamp || Date.now()
+                ).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+              </Text>
+            </View>
+          </ViewShot>
+
+          {/* Buttons */}
+          <View className="flex-row justify-between">
+            <CustomButton
+              title="Retake"
+              onPress={() => setImageToStamp(null)}
+              className="bg-gray-400 flex-1 mr-2"
+              disabled={uploadingImage}
+            />
+            <CustomButton
+              title={uploadingImage ? "Uploading..." : "Confirm & Upload"}
+              onPress={handleConfirmAndUploadImage}
+              className="bg-success-500 flex-1 ml-2"
+              disabled={uploadingImage}
+            />
+          </View>
+          {uploadingImage && <ActivityIndicator size="large" color="#0000ff" className="mt-4" />}
+        </View>
+      </ReactNativeModal>
+
+
       <ReactNativeModal
         isVisible={verification.state === "pending"}
         onModalHide={() => {
@@ -584,7 +677,7 @@ export default function Trip() {
 
       <ReactNativeModal isVisible={showSuccessModal} onBackdropPress={() => setShowSuccessModal(false)}>
         <View className="bg-white px-7 py-9 rounded-2xl items-center">
-          <Image source={require("@/assets/images/check.png")} className="w-20 h-20 mr-2" />
+          <Image source={require("../../../assets/images/check.png")} className="w-20 h-20 mr-2" />
           <Text className="font-JakartaExtraBold text-3xl mt-3">Success</Text>
           <Text className="font-Jakarta text-center mt-2 mb-4">Trip completed successfully.</Text>
           <CustomButton 
