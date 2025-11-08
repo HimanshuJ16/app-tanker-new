@@ -178,10 +178,11 @@ export default function Trip() {
   }
 
 
-  const handleOpenLocation = (address: string) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
-    Linking.openURL(url)
-  }
+  const handleOpenLocation = (latitude: number, longitude: number) => {
+    const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+    Linking.openURL(url);
+  };
+
 
   const handleCall = (phoneNumber: string) => {
     Linking.openURL(`tel:${phoneNumber}`)
@@ -504,7 +505,7 @@ export default function Trip() {
           <Text className="text-gray-600 text-sm mt-2">Address</Text>
           <View className="flex-row items-center">
             <Text className="text-gray-800 flex-1">{tripDetails.hydrant.address}</Text>
-            <TouchableOpacity onPress={() => handleOpenLocation(tripDetails.hydrant.address)} className="ml-2">
+            <TouchableOpacity onPress={() => handleOpenLocation(tripDetails.hydrant.latitude, tripDetails.hydrant.longitude)} className="ml-2">
               <Ionicons name="location" size={24} color="#3b82f6" />
             </TouchableOpacity>
           </View>
@@ -529,7 +530,7 @@ export default function Trip() {
           <Text className="text-gray-600 text-sm mt-2">Address</Text>
           <View className="flex-row items-center">
             <Text className="text-gray-800 flex-1">{tripDetails.destination.address}</Text>
-            <TouchableOpacity onPress={() => handleOpenLocation(tripDetails.destination.address)} className="ml-2">
+            <TouchableOpacity onPress={() => handleOpenLocation(tripDetails.destination.latitude, tripDetails.destination.longitude)} className="ml-2">
               <Ionicons name="location" size={24} color="#3b82f6" />
             </TouchableOpacity>
           </View>
