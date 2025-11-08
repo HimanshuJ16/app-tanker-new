@@ -34,6 +34,7 @@ const Home = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isTripOngoing, setIsTripOngoing] = useState(false); // New state
 
   const fetchBookings = async () => {
     try {
@@ -55,10 +56,18 @@ const Home = () => {
     }
   };
   
-
   useEffect(() => {
     onRefresh();
   }, []);
+
+  // --- NEW: Effect to check for ongoing trips ---
+  // This runs whenever the bookings list is updated
+  useEffect(() => {
+    const ongoingTripExists = bookings.some(
+      (b) => b.trip && (b.trip.status === 'ongoing' || b.trip.status === 'pickup' || b.trip.status === 'delivered')
+    );
+    setIsTripOngoing(ongoingTripExists);
+  }, [bookings]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -67,6 +76,12 @@ const Home = () => {
   };
 
   const handleAccept = async (bookingId: string) => {
+    // --- NEW: Check if a trip is already ongoing ---
+    if (isTripOngoing) {
+      Alert.alert('Trip Already Active', 'You must complete your current trip before accepting a new one.');
+      return;
+    }
+
     try {
       setLoading(true);
       const vehicleInfo = await SecureStore.getItemAsync('vehicleInfo');
@@ -82,14 +97,7 @@ const Home = () => {
 
       if (response.success) {
         Alert.alert('Success', 'Booking accepted successfully');
-        setBookings(prevBookings =>
-          prevBookings.map(booking =>
-            booking.bookingId === bookingId
-              ? { ...booking, status: 'accepted', tripId: response.tripId }
-              : booking
-          )
-        );
-        onRefresh();
+        onRefresh(); // Refresh data to update UI
       } else {
         Alert.alert('Error', response.error || 'Failed to accept booking');
       }
@@ -102,6 +110,9 @@ const Home = () => {
   };
 
   const handleReject = async (bookingId: string) => {
+    // You can also add this check for rejection if needed
+    // if (isTripOngoing) { ... }
+
     try {
       setLoading(true);
       const vehicleInfo = await SecureStore.getItemAsync('vehicleInfo');
@@ -117,14 +128,7 @@ const Home = () => {
 
       if (response.success) {
         Alert.alert('Success', 'Booking rejected successfully');
-        setBookings(prevBookings =>
-          prevBookings.map(booking =>
-            booking.bookingId === bookingId
-              ? { ...booking, status: 'rejected' }
-              : booking
-          )
-        );
-        onRefresh();
+        onRefresh(); // Refresh data
       } else {
         Alert.alert('Error', response.error || 'Failed to reject booking');
       }
@@ -137,6 +141,12 @@ const Home = () => {
   };
 
   const handleStartTrip = async (tripId: string) => {
+    // --- NEW: Check if a trip is already ongoing ---
+    if (isTripOngoing) {
+      Alert.alert('Trip Already Active', 'You already have an ongoing trip.');
+      return;
+    }
+
     try {
       setLoading(true);
       const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/start?id=${tripId}`, {
@@ -169,7 +179,7 @@ const Home = () => {
         </View>
         <View>
           <Text className="text-xs text-gray-600">Booking Date</Text>
-          <Text className="text-sm font-semibold">{item.journeyDate}</Text>
+          <Text className="text-sm font-semibold">{new Date(item.journeyDate).toLocaleDateString()}</Text>
         </View>
       </View>
 
@@ -194,14 +204,22 @@ const Home = () => {
       {!item.trip.tripId && (
         <View className="flex-row justify-between mt-2">
           <TouchableOpacity
-            className="flex-1 bg-green-500 py-2 rounded mr-1 items-center"
+            // --- UPDATED: Add disabled state and styling ---
+            className={`flex-1 py-2 rounded mr-1 items-center ${
+              isTripOngoing ? 'bg-gray-400' : 'bg-green-500'
+            }`}
             onPress={() => handleAccept(item.bookingId)}
+            disabled={loading || isTripOngoing}
           >
             <Text className="text-white font-semibold">Accept</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            className="flex-1 bg-red-500 py-2 rounded ml-1 items-center"
+            // --- UPDATED: Add disabled state and styling ---
+            className={`flex-1 py-2 rounded ml-1 items-center ${
+              isTripOngoing ? 'bg-gray-400' : 'bg-red-500'
+            }`}
             onPress={() => handleReject(item.bookingId)}
+            disabled={loading || isTripOngoing} // Also disable reject if a trip is ongoing
           >
             <Text className="text-white font-semibold">Reject</Text>
           </TouchableOpacity>
@@ -210,14 +228,18 @@ const Home = () => {
 
       {item.trip.tripId && item.trip.status === 'accepted' && (
         <TouchableOpacity
-          className="bg-green-500 py-2 rounded mt-2 items-center"
+          // --- UPDATED: Add disabled state and styling ---
+          className={`py-2 rounded mt-2 items-center ${
+            isTripOngoing ? 'bg-gray-400' : 'bg-green-500'
+          }`}
           onPress={() => handleStartTrip(item.trip.tripId!)}
+          disabled={loading || isTripOngoing}
         >
           <Text className="text-white font-semibold">Start Trip</Text>
         </TouchableOpacity>
       )}
 
-      {(item.trip.tripId && item.trip.status === 'ongoing' || item.trip.status === 'pickup' || item.trip.status === 'delivered') && (
+      {(item.trip.tripId && (item.trip.status === 'ongoing' || item.trip.status === 'pickup' || item.trip.status === 'delivered')) && (
         <TouchableOpacity
           className="bg-green-700 py-2 rounded mt-2 items-center"
           onPress={() => handleTrip(item.trip.tripId!)}
