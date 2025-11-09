@@ -86,7 +86,7 @@ export default function Trip() {
   
   // State for the image stamping modal
   const [imageToStamp, setImageToStamp] = useState<ImageStampDetails | null>(null);
-  const viewShotRef = useRef<ViewShot | null>(null);
+  const viewShotRef = useRef<ViewShot>(null);
 
   const [verification, setVerification] = useState({
     state: "idle",
@@ -244,45 +244,41 @@ export default function Trip() {
   // --- NEW FUNCTION: To handle the stamped image upload ---
   const handleConfirmAndUploadImage = async () => {
     if (!viewShotRef.current || !imageToStamp) return;
-  
-    setUploadingImage(true);
+
+    setUploadingImage(true); // Show loading indicator
     
     try {
-      // Ensure capture method exists on the ref before invoking
-      if (typeof viewShotRef.current.capture !== "function") {
-        throw new Error("Capture function is not available on viewShotRef");
+      // 1. Capture the ViewShot component as a URI
+      let uri: string | undefined;
+      if (viewShotRef.current && typeof viewShotRef.current.capture === "function") {
+        uri = await viewShotRef.current.capture();
+      } else {
+        throw new Error("ViewShot ref or capture method is undefined.");
       }
-    
-      // Capture the ViewShot component as a URI
-      const uri = await viewShotRef.current.capture();
-      
-      if (!uri) {
-        throw new Error("Failed to capture image");
-      }
-    
-      // Create asset object for Cloudinary with proper file structure
+
+      // 2. Create a fake asset object for Cloudinary
       const stampedAsset = {
-        uri: uri,
-        type: 'image/jpeg',
-        name: `stamped_${Date.now()}.jpg`,
-        width: imageToStamp.asset.width,
-        height: imageToStamp.asset.height
+        ...imageToStamp.asset,
+        uri: uri, // Use the new captured URI
+        // We need to fake the type for cloudinary upload
+        type: 'image/jpeg', 
       };
-    
-      // Upload the stamped image
+
+      // 3. Upload the *stamped* image
       const link = await uploadToCloudinary(stampedAsset);
       console.log("Uploaded stamped image link =>", link);
       
-      // Send link to backend
+      // 4. Send link to our backend
       await handleReachedHydrant(link);
-    
+
     } catch (error) {
       console.error("Error capturing or uploading stamped image:", error);
       Alert.alert("Upload Error", "Failed to upload the stamped image.");
-      setUploadingImage(false);
+      setUploadingImage(false); // Hide loading on error
     } finally {
+      // 5. Close the modal
       setImageToStamp(null);
-      setUploadingImage(false);
+      // uploadingImage state is reset inside handleReachedHydrant
     }
   };
 
@@ -602,61 +598,59 @@ export default function Trip() {
       <ReactNativeModal isVisible={imageToStamp !== null}>
         <View className="bg-white p-4 rounded-lg">
           <Text className="text-lg font-bold mb-4">Confirm Image</Text>
-
+          
           <ViewShot
             ref={viewShotRef}
             options={{ format: "jpg", quality: 0.9 }}
-            style={{ backgroundColor: 'transparent' }}
           >
-            {/* Container with aspect ratio that matches typical phone camera */}
-            <View style={{ width: 300, height: 400, backgroundColor: '#000' }}>
-              {/* The Image - now fills container */}
+            <View style={{
+              width: 380,
+              height: 500,
+              backgroundColor: '#000',
+              position: 'relative',
+              overflow: 'hidden',
+            }}>
+              {/* Full-cover image */}
               <Image
                 source={{ uri: imageToStamp?.asset.uri }}
-                style={{ 
-                  width: '100%', 
-                  height: '100%',
+                style={{
                   position: 'absolute',
                   top: 0,
-                  left: 0
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
                 }}
                 resizeMode="cover"
               />
-              {/* The Text Overlay - positioned INSIDE the image */}
+          
+              {/* TOP-LEFT STAMP (exactly like your screenshot) */}
               <View style={{
                 position: 'absolute',
-                top: 10,
-                left: 10,
-                backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                paddingVertical: 6,
-                paddingHorizontal: 10,
-                borderRadius: 6
+                top: 12,
+                left: 12,
+                backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                paddingVertical: 10,
+                paddingHorizontal: 14,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: 'rgba(255, 255, 255, 0.3)',
               }}>
-                <Text style={{ color: 'white', fontSize: 14, fontWeight: '600' }}>
-                  Lat: {imageToStamp?.location.coords.latitude.toFixed(5)}
+                <Text style={{ color: 'white', fontSize: 13, fontWeight: '600' }}>
+                  Lat: {imageToStamp?.location.coords.latitude.toFixed(6)}
                 </Text>
-                <Text style={{ color: 'white', fontSize: 14, fontWeight: '600' }}>
-                  Lon: {imageToStamp?.location.coords.longitude.toFixed(5)}
+                <Text style={{ color: 'white', fontSize: 13, fontWeight: '600' }}>
+                  Lon: {imageToStamp?.location.coords.longitude.toFixed(6)}
                 </Text>
-                <Text style={{ color: 'white', fontSize: 14, fontWeight: '600' }}>
-                  {new Date(
-                    imageToStamp?.location.timestamp || Date.now()
-                  ).toLocaleString("en-IN", { 
-                    timeZone: "Asia/Kolkata",
-                    hour12: true,
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
+                <Text style={{ color: 'white', fontSize: 12, marginTop: 4, opacity: 0.9 }}>
+                  {new Date(imageToStamp?.location.timestamp || Date.now())
+                    .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
                 </Text>
               </View>
             </View>
           </ViewShot>
-                
+                  
           {/* Buttons */}
-          <View className="flex-row justify-between mt-4">
+          <View className="flex-row justify-between">
             <CustomButton
               title="Retake"
               onPress={() => setImageToStamp(null)}
