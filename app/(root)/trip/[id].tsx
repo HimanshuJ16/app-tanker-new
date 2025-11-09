@@ -603,27 +603,36 @@ export default function Trip() {
           <ViewShot
             ref={viewShotRef}
             options={{ format: "jpg", quality: 0.9 }}
-            // className="mb-4"
           >
-            {/* The Image */}
-            <Image
-              source={{ uri: imageToStamp?.asset.uri }}
-              className="w-full h-64"
-              resizeMode="contain"
-            />
-            {/* The Text Overlay */}
-            <View className="absolute top-2 left-2 bg-black/50 p-2 rounded">
-              <Text className="text-white text-xs">
-                {`Lat: ${imageToStamp?.location.coords.latitude.toFixed(5)}`}
-              </Text>
-              <Text className="text-white text-xs">
-                {`Lon: ${imageToStamp?.location.coords.longitude.toFixed(5)}`}
-              </Text>
-              <Text className="text-white text-xs">
-                {new Date(
-                  imageToStamp?.location.timestamp || Date.now()
-                ).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
-              </Text>
+            {/* Add a container with defined dimensions */}
+            <View style={{ width: 350, height: 350, position: 'relative' }}>
+              {/* The Image */}
+              <Image
+                source={{ uri: imageToStamp?.asset.uri }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="contain"
+              />
+              {/* The Text Overlay */}
+              <View style={{
+                position: 'absolute',
+                top: 8,
+                left: 8,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                padding: 8,
+                borderRadius: 4
+              }}>
+                <Text style={{ color: 'white', fontSize: 12 }}>
+                  {`Lat: ${imageToStamp?.location.coords.latitude.toFixed(5)}`}
+                </Text>
+                <Text style={{ color: 'white', fontSize: 12 }}>
+                  {`Lon: ${imageToStamp?.location.coords.longitude.toFixed(5)}`}
+                </Text>
+                <Text style={{ color: 'white', fontSize: 12 }}>
+                  {new Date(
+                    imageToStamp?.location.timestamp || Date.now()
+                  ).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+                </Text>
+              </View>
             </View>
           </ViewShot>
 
