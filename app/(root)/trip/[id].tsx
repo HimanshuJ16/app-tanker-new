@@ -32,7 +32,7 @@ declare global {
 }
 
 // Define the radius (in kilometers) for the geofence check
-const GEOFENCE_RADIUS_KM = 0.05 // 50 meters
+const GEOFENCE_RADIUS_KM = 0.07 // 70 meters
 
 interface TripDetails {
   tripId: string
@@ -357,12 +357,6 @@ export default function Trip() {
 
   const handleSendOTP = async () => {
     if (!tripDetails) return;
-    
-    const location = await checkLocationProximity(tripDetails.destination, "destination");
-    if (!location) {
-        Alert.alert("Location Not Correct", "You must be at the destination to send the OTP.");
-        return;
-    }
 
     try {
       setIsLoading(true)
@@ -583,10 +577,10 @@ export default function Trip() {
             {tripDetails.video && (
               <TouchableOpacity className="bg-orange-600 p-4 rounded" 
                 onPress={handleSendOTP} 
-                disabled={isLoading || isVerifyingLocation} // Disable on location check
+                disabled={isLoading}
               >
                 <Text className="text-white text-center font-bold">
-                  {isLoading ? "SENDING OTP..." : (isVerifyingLocation ? "CHECKING LOCATION..." : "SEND OTP FOR VERIFICATION")}
+                  {isLoading ? "SENDING OTP..." : "SEND OTP FOR VERIFICATION"}
                 </Text>
               </TouchableOpacity>
             )}

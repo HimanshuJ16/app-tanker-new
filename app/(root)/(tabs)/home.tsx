@@ -34,7 +34,7 @@ const Home = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [isTripOngoing, setIsTripOngoing] = useState(false); // Tracks 'ongoing', 'pickup', 'delivered'
+  const [isTripOngoing, setIsTripOngoing] = useState(false); // Tracks 'ongoing', 'pickup'
   const [isTripAccepted, setIsTripAccepted] = useState(false); // Tracks 'accepted'
 
   const fetchBookings = async () => {
@@ -68,7 +68,7 @@ const Home = () => {
   // --- UPDATED: Effect to check for both ongoing AND accepted trips ---
   useEffect(() => {
     const ongoingTripExists = bookings.some(
-      (b) => b.trip && (b.trip.status === 'ongoing' || b.trip.status === 'pickup' || b.trip.status === 'delivered')
+      (b) => b.trip && (b.trip.status === 'ongoing' || b.trip.status === 'pickup')
     );
     setIsTripOngoing(ongoingTripExists);
 
@@ -195,7 +195,7 @@ const Home = () => {
         </View>
         <View>
           <Text className="text-xs text-gray-600">Booking Date</Text>
-          <Text className="text-sm font-semibold">{new Date(item.journeyDate).toLocaleDateString()}</Text>
+          <Text className="text-sm font-semibold">{item.journeyDate}</Text>
         </View>
       </View>
 
