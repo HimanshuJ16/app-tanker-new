@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef } from "react" // Import useRef
 import {
   View,
   Text,
@@ -9,9 +9,7 @@ import {
   AppState,
   type AppStateStatus,
   Image,
-  ActivityIndicator,
-  Animated,
-  Dimensions,
+  ActivityIndicator, // Import ActivityIndicator
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useLocalSearchParams, useRouter } from "expo-router"
@@ -25,17 +23,16 @@ import InputField from "@/components/InputField"
 import CustomButton from "@/components/CustomButton"
 import { icons } from "@/constants"
 import React from "react"
-import * as Location from "expo-location"
-import { calculateDistance } from "@/lib/distance"
-import ViewShot from "react-native-view-shot"
-import * as Haptics from 'expo-haptics'
-
-const { width } = Dimensions.get('window')
-const GEOFENCE_RADIUS_KM = 0.07
+import * as Location from "expo-location" // Import expo-location
+import { calculateDistance } from "@/lib/distance" // Import the distance calculator
+import ViewShot from "react-native-view-shot" // Import ViewShot
 
 declare global {
   var tripId: string
 }
+
+// Define the radius (in kilometers) for the geofence check
+const GEOFENCE_RADIUS_KM = 0.07 // 70 meters
 
 interface TripDetails {
   tripId: string
@@ -53,14 +50,14 @@ interface TripDetails {
   hydrant: {
     name: string
     address: string
-    latitude: number
-    longitude: number
+    latitude: number  // <-- REQUIRED: Must be provided by your API
+    longitude: number // <-- REQUIRED: Must be provided by your API
   }
   destination: {
     name: string
     address: string
-    latitude: number
-    longitude: number
+    latitude: number  // <-- REQUIRED: Must be provided by your API
+    longitude: number // <-- REQUIRED: Must be provided by your API
   }
   customer: {
     name: string
@@ -86,10 +83,10 @@ export default function Trip() {
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [isVerifyingLocation, setIsVerifyingLocation] = useState(false)
-  const [imageToStamp, setImageToStamp] = useState<ImageStampDetails | null>(null)
-  const viewShotRef = useRef<ViewShot>(null)
-  const fadeAnim = useRef(new Animated.Value(0)).current
-  const slideAnim = useRef(new Animated.Value(30)).current
+  
+  // State for the image stamping modal
+  const [imageToStamp, setImageToStamp] = useState<ImageStampDetails | null>(null);
+  const viewShotRef = useRef<ViewShot>(null);
 
   const [verification, setVerification] = useState({
     state: "idle",
@@ -105,23 +102,7 @@ export default function Trip() {
     fetchTripDetails()
     initializeLocationTracking(id)
 
-    // Entrance animation
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-    ]).start()
-
-    const subscription = AppState.addEventListener("change", (nextAppState) => 
-      handleAppStateChange(nextAppState, id)
-    )
+    const subscription = AppState.addEventListener("change", (nextAppState) => handleAppStateChange(nextAppState, id))
 
     return () => {
       subscription.remove()
@@ -136,9 +117,10 @@ export default function Trip() {
 
       if (response && response.success) {
         setTripDetails(response.trip)
+         // Check if API is sending coordinates
         if (!response.trip?.hydrant?.latitude || !response.trip?.destination?.latitude) {
-          Alert.alert("API Error", "Location coordinates missing. Contact support.")
-          setError("Missing location coordinates from API.")
+            Alert.alert("API Error", "Location coordinates for hydrant or destination are missing. Please contact support.")
+            setError("Missing location coordinates from API.")
         }
       } else {
         throw new Error(response?.error || "Failed to fetch trip details")
@@ -156,12 +138,10 @@ export default function Trip() {
     targetName: string
   ): Promise<Location.LocationObject | null> => {
     setIsVerifyingLocation(true)
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    
     try {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== "granted") {
-        Alert.alert("Permission Denied", "Location permission required.")
+        Alert.alert("Permission Denied", "Location permission is required to verify your position.")
         return null
       }
 
@@ -178,53 +158,47 @@ export default function Trip() {
       )
 
       if (distance <= GEOFENCE_RADIUS_KM) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-        return currentLocation
+        return currentLocation 
       } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
         Alert.alert(
-          "Location Verification Failed",
-          `You must be within 50 meters of the ${targetName}. Current distance: ~${(distance * 1000).toFixed(0)}m`
+          "Location Not Correct",
+          `You must be within 50 meters of the ${targetName} to perform this action. You are currently ~${(
+            distance * 1000
+          ).toFixed(0)} meters away.`
         )
-        return null
+        return null 
       }
     } catch (error) {
-      console.error("Error checking location:", error)
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      Alert.alert("Location Error", "Could not verify your location.")
+      console.error("Error checking location proximity:", error)
+      Alert.alert("Location Error", "Could not verify your current location. Please try again.")
       return null
     } finally {
       setIsVerifyingLocation(false)
     }
   }
 
+
   const handleOpenLocation = (latitude: number, longitude: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`
-    Linking.openURL(url)
-  }
+    const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+    Linking.openURL(url);
+  };
+
 
   const handleCall = (phoneNumber: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     Linking.openURL(`tel:${phoneNumber}`)
   }
 
   const handleGoBack = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     router.push("/(root)/(tabs)/home")
   }
 
   const handleReachedHydrant = async (photoUrl?: string) => {
     try {
-      const response = await fetchAPI(
-        `${process.env.EXPO_PUBLIC_API_URL}/trip/reached-hydrant?id=${id}`,
-        {
-          method: "POST",
-          body: JSON.stringify({ photoUrl }),
-        }
-      )
+      const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/reached-hydrant?id=${id}`, {
+        method: "POST",
+        body: JSON.stringify({ photoUrl }),
+      })
       if (response.success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
         Alert.alert("Success", "Hydrant reached status updated")
         fetchTripDetails()
       } else {
@@ -232,19 +206,24 @@ export default function Trip() {
       }
     } catch (error) {
       console.error("Error updating trip status:", error)
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      Alert.alert("Error", "Failed to update hydrant status.")
+      Alert.alert("Error", "Failed to update hydrant status. Please try again.")
     } finally {
       setUploadingImage(false)
     }
   }
 
+  // --- UPDATED FUNCTION ---
   const pickImageFromCamera = async () => {
     if (!tripDetails) return
 
+    // 1. Check location *before* opening camera
     const location = await checkLocationProximity(tripDetails.hydrant, "hydrant")
-    if (!location) return
+    
+    if (!location) {
+      return // Stop if not at location
+    }
 
+    // 2. Proceed with camera if check passed
     const permission = await ImagePicker.requestCameraPermissionsAsync()
     if (permission.granted) {
       const result = await ImagePicker.launchCameraAsync({
@@ -253,46 +232,64 @@ export default function Trip() {
         quality: 1,
       })
 
-      if (!result.canceled) {
-        setImageToStamp({ asset: result.assets[0], location: location })
+      if (result.canceled) {
+        return;
       }
+
+      // 3. Set image to be stamped, which opens the modal
+      setImageToStamp({ asset: result.assets[0], location: location });
     }
   }
 
+  // --- NEW FUNCTION: To handle the stamped image upload ---
   const handleConfirmAndUploadImage = async () => {
-    if (!viewShotRef.current || !imageToStamp) return
+    if (!viewShotRef.current || !imageToStamp) return;
 
-    setUploadingImage(true)
+    setUploadingImage(true); // Show loading indicator
     
     try {
-      let uri: string | undefined
+      // 1. Capture the ViewShot component as a URI
+      let uri: string | undefined;
       if (viewShotRef.current && typeof viewShotRef.current.capture === "function") {
-        uri = await viewShotRef.current.capture()
+        uri = await viewShotRef.current.capture();
       } else {
-        throw new Error("ViewShot ref undefined")
+        throw new Error("ViewShot ref or capture method is undefined.");
       }
 
+      // 2. Create a fake asset object for Cloudinary
       const stampedAsset = {
         ...imageToStamp.asset,
-        uri: uri,
-        type: 'image/jpeg',
-      }
+        uri: uri, // Use the new captured URI
+        // We need to fake the type for cloudinary upload
+        type: 'image/jpeg', 
+      };
 
-      const link = await uploadToCloudinary(stampedAsset)
-      await handleReachedHydrant(link)
+      // 3. Upload the *stamped* image
+      const link = await uploadToCloudinary(stampedAsset);
+      console.log("Uploaded stamped image link =>", link);
+      
+      // 4. Send link to our backend
+      await handleReachedHydrant(link);
+
     } catch (error) {
-      console.error("Error uploading stamped image:", error)
-      Alert.alert("Upload Error", "Failed to upload image.")
-      setUploadingImage(false)
+      console.error("Error capturing or uploading stamped image:", error);
+      Alert.alert("Upload Error", "Failed to upload the stamped image.");
+      setUploadingImage(false); // Hide loading on error
     } finally {
-      setImageToStamp(null)
+      // 5. Close the modal
+      setImageToStamp(null);
+      // uploadingImage state is reset inside handleReachedHydrant
     }
-  }
+  };
 
   const handleAppStateChange = (nextAppState: AppStateStatus, tripId: string) => {
     setAppState(nextAppState)
+
     if (appState.match(/inactive|background/) && nextAppState === "active") {
+      console.log("App has moved to the foreground, ensuring location tracking is active.")
       initializeLocationTracking(tripId)
+    } else if (appState === "active" && nextAppState.match(/inactive|background/)) {
+      console.log("App has moved to the background, continuing location tracking.")
     }
   }
 
@@ -300,7 +297,10 @@ export default function Trip() {
     const success = await setupLocationTracking(tripId)
     setHasLocationPermission(success)
     if (!success) {
-      Alert.alert("Permission Required", "Location permissions needed for trip tracking.")
+      Alert.alert(
+        "Permission Required",
+        "This app needs location permissions to track your trip, including when the app is in the background.",
+      )
     }
     setTrackingStatus(success)
   }
@@ -314,10 +314,12 @@ export default function Trip() {
   }, [])
 
   const pickVideoFromCamera = async () => {
-    if (!tripDetails) return
+    if (!tripDetails) return;
 
-    const location = await checkLocationProximity(tripDetails.destination, "destination")
-    if (!location) return
+    const location = await checkLocationProximity(tripDetails.destination, "destination");
+    if (!location) {
+      return; 
+    }
 
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync()
@@ -332,17 +334,13 @@ export default function Trip() {
           setUploadingVideo(true)
           const videoUrl = await uploadToCloudinary(result.assets[0])
 
-          const response = await fetchAPI(
-            `${process.env.EXPO_PUBLIC_API_URL}/trip/water-delivered?id=${id}`,
-            {
-              method: "POST",
-              body: JSON.stringify({ videoUrl }),
-            }
-          )
+          const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/water-delivered?id=${id}`, {
+            method: "POST",
+            body: JSON.stringify({ videoUrl }),
+          })
 
           if (response.success) {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-            Alert.alert("Success", "Video uploaded successfully")
+            Alert.alert("Success", "Water supply video uploaded successfully")
             fetchTripDetails()
           } else {
             throw new Error(response.error || "Failed to upload video")
@@ -351,17 +349,14 @@ export default function Trip() {
       }
     } catch (error) {
       console.error("Error uploading video:", error)
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      Alert.alert("Error", "Failed to upload video.")
+      Alert.alert("Error", "Failed to upload video. Please try again.")
     } finally {
       setUploadingVideo(false)
     }
   }
 
   const handleSendOTP = async () => {
-    if (!tripDetails) return
-
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    if (!tripDetails) return;
 
     try {
       setIsLoading(true)
@@ -371,17 +366,17 @@ export default function Trip() {
         body: JSON.stringify({ phoneNumber: tripDetails?.customer.contactNumber }),
       })
 
+      console.log(response)
+
       if (response.success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-        setVerificationId(response.verificationId)
+        setVerificationId(response.verificationId) 
         setVerification({ ...verification, state: "pending" })
       } else {
         throw new Error(response.error || "Failed to send OTP")
       }
     } catch (error) {
       console.error("Error sending OTP:", error)
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      Alert.alert("Error", "Failed to send OTP.")
+      Alert.alert("Error", "Failed to send OTP. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -389,7 +384,7 @@ export default function Trip() {
 
   const handleVerifyOTP = async () => {
     if (!verificationId) {
-      Alert.alert("Error", "OTP verification ID not found.")
+      Alert.alert("Error", "OTP verification ID not found. Please request a new OTP.")
       return
     }
 
@@ -398,440 +393,218 @@ export default function Trip() {
       return
     }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy)
-
     try {
+      console.log({
+        verificationId, 
+        otp: verification.code,
+        tripId: id,
+      })
+
       const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          verificationId,
+          verificationId, 
           otp: verification.code,
           tripId: id,
         }),
       })
 
       if (response.success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
         setVerification({ ...verification, state: "success" })
         fetchTripDetails()
         setShowSuccessModal(true)
-        stopLocationTracking()
+        stopLocationTracking() 
       } else {
         throw new Error(response.error || "Failed to verify OTP")
       }
     } catch (error: any) {
       console.error("Error verifying OTP:", error)
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
       setVerification({ ...verification, state: "error", error: error.message })
     }
   }
 
-  // Progress Step Component
-  const ProgressStep = ({ 
-    icon, 
-    title, 
-    completed, 
-    active, 
-    isLast 
-  }: { 
-    icon: string; 
-    title: string; 
-    completed: boolean;
-    active: boolean;
-    isLast?: boolean;
-  }) => (
-    <View className="flex-row items-center">
-      <View className="items-center">
-        <View 
-          className={`w-12 h-12 rounded-full items-center justify-center ${
-            completed ? 'bg-green-500' : active ? 'bg-blue-500' : 'bg-gray-300'
-          }`}
-        >
-          <Ionicons 
-            name={completed ? "checkmark" : icon as any} 
-            size={24} 
-            color="white" 
-          />
-        </View>
-        <Text 
-          className={`text-xs font-JakartaSemiBold mt-2 text-center ${
-            completed || active ? 'text-gray-900' : 'text-gray-400'
-          }`}
-          style={{ width: 70 }}
-        >
-          {title}
-        </Text>
-      </View>
-      {!isLast && (
-        <View 
-          className={`h-0.5 flex-1 mx-2 ${
-            completed ? 'bg-green-500' : 'bg-gray-300'
-          }`}
-          style={{ width: 40 }}
-        />
-      )}
-    </View>
-  )
-
-  // Location Card Component
-  const LocationCard = ({ 
-    icon, 
-    title, 
-    name, 
-    address, 
-    latitude, 
-    longitude,
-    type 
-  }: {
-    icon: string;
-    title: string;
-    name: string;
-    address: string;
-    latitude: number;
-    longitude: number;
-    type: 'pickup' | 'delivery';
-  }) => (
-    <View className={`rounded-2xl p-5 mb-4 ${
-      type === 'pickup' ? 'bg-blue-50 border border-blue-200' : 'bg-green-50 border border-green-200'
-    }`}>
-      <View className="flex-row items-center mb-3">
-        <View 
-          className={`w-10 h-10 rounded-full items-center justify-center ${
-            type === 'pickup' ? 'bg-blue-500' : 'bg-green-500'
-          }`}
-        >
-          <Ionicons name={icon as any} size={20} color="white" />
-        </View>
-        <Text className="text-base font-JakartaBold text-gray-900 ml-3">
-          {title}
-        </Text>
-      </View>
-      
-      <Text className="text-sm font-JakartaSemiBold text-gray-900 mb-1">
-        {name}
-      </Text>
-      <Text className="text-xs text-gray-600 font-Jakarta mb-3">
-        {address}
-      </Text>
-
-      <TouchableOpacity
-        onPress={() => handleOpenLocation(latitude, longitude)}
-        className={`flex-row items-center justify-center py-2.5 rounded-xl ${
-          type === 'pickup' ? 'bg-blue-600' : 'bg-green-600'
-        }`}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="navigate" size={18} color="white" />
-        <Text className="text-white font-JakartaSemiBold ml-2">
-          Open in Maps
-        </Text>
-      </TouchableOpacity>
-    </View>
-  )
-
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50 justify-center items-center">
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text className="text-gray-600 font-Jakarta mt-4">Loading trip details...</Text>
+      <SafeAreaView className="flex-1 bg-white justify-center items-center">
+        <Text>Loading trip details...</Text>
       </SafeAreaView>
     )
   }
 
-  if (error || !tripDetails) {
+  if (error) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50 justify-center items-center px-6">
-        <View className="w-20 h-20 bg-red-100 rounded-full items-center justify-center mb-4">
-          <Ionicons name="alert-circle" size={40} color="#EF4444" />
-        </View>
-        <Text className="text-xl font-JakartaBold text-gray-900 mb-2">
-          Error Loading Trip
-        </Text>
-        <Text className="text-sm text-gray-600 text-center mb-6">
-          {error || "No trip details found"}
-        </Text>
-        <CustomButton
-          title="Try Again"
-          onPress={() => fetchTripDetails()}
-          className="w-full"
-        />
-        <TouchableOpacity onPress={handleGoBack} className="mt-4">
-          <Text className="text-blue-600 font-JakartaSemiBold">Go Back</Text>
+      <SafeAreaView className="flex-1 bg-white justify-center items-center">
+        <Text className="text-red-500 mb-4">{error}</Text>
+        <TouchableOpacity className="bg-blue-500 p-2 rounded" onPress={() => fetchTripDetails()}>
+          <Text className="text-white">Retry</Text>
         </TouchableOpacity>
       </SafeAreaView>
     )
   }
 
-  const tripProgress = {
-    hydrantReached: !!tripDetails.photo,
-    waterDelivered: !!tripDetails.video,
-    otpVerified: tripDetails.status === 'completed'
+  if (!tripDetails) {
+    return (
+      <SafeAreaView className="flex-1 bg-white justify-center items-center">
+        <Text>No trip details found for trip ID: {id}.</Text>
+        <TouchableOpacity className="bg-blue-500 p-2 rounded mt-4" onPress={handleGoBack}>
+          <Text className="text-white">Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    )
   }
 
+  const getHydrantButtonText = () => {
+    if (isVerifyingLocation) return "CHECKING LOCATION...";
+    if (uploadingImage) return "UPLOADING..."; // This state is now set in handleConfirmAndUpload
+    return "REACHED HYDRANT";
+  };
+
+  const getVideoUploadButtonText = () => {
+    if (isVerifyingLocation) return "CHECKING LOCATION...";
+    if (uploadingVideo) return "UPLOADING...";
+    return "UPLOAD VIDEO OF WATER SUPPLY";
+  };
+
+
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-4">
-        <View className="flex-row items-center">
-          <TouchableOpacity 
-            onPress={handleGoBack} 
-            className="mr-4 w-10 h-10 bg-white/20 rounded-full items-center justify-center"
-            activeOpacity={0.7}
-          >
-            <Ionicons name="arrow-back" size={24} color="white" />
-          </TouchableOpacity>
-          <View className="flex-1">
-            <Text className="text-white text-xl font-JakartaBold">
-              Trip In Progress
-            </Text>
-            <Text className="text-blue-100 text-xs font-Jakarta mt-1">
-              Booking ID: {tripDetails.booking.id}
-            </Text>
-          </View>
-          <View className="w-10 h-10 bg-green-500 rounded-full items-center justify-center">
-            <Ionicons name="navigate" size={20} color="white" />
-          </View>
-        </View>
+    <SafeAreaView className="flex-1 bg-white">
+      <View className="bg-blue-600 p-4 flex-row items-center">
+        <TouchableOpacity onPress={handleGoBack} className="mr-4">
+          <Ionicons name="arrow-back" size={24} color="white" />
+        </TouchableOpacity>
+        <Text className="text-white text-xl font-bold">En-Route</Text>
       </View>
 
-      <ScrollView 
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 20 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View
-          style={{
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          }}
-          className="px-5 py-4"
-        >
-          {/* Progress Timeline */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
-            <Text className="text-lg font-JakartaBold text-gray-900 mb-4">
-              Trip Progress
-            </Text>
-            <View className="flex-row justify-between items-start">
-              <ProgressStep
-                icon="water"
-                title="Reach Hydrant"
-                completed={tripProgress.hydrantReached}
-                active={!tripProgress.hydrantReached}
-              />
-              <ProgressStep
-                icon="videocam"
-                title="Deliver Water"
-                completed={tripProgress.waterDelivered}
-                active={tripProgress.hydrantReached && !tripProgress.waterDelivered}
-              />
-              <ProgressStep
-                icon="shield-checkmark"
-                title="Verify OTP"
-                completed={tripProgress.otpVerified}
-                active={tripProgress.waterDelivered && !tripProgress.otpVerified}
-                isLast
-              />
-            </View>
+      <ScrollView className="flex-1 p-4">
+        <View className="mb-6">
+          <Text className="text-gray-600 text-sm">Booking ID</Text>
+          <Text className="text-gray-800">{tripDetails.booking.id}</Text>
+        </View>
+
+        <View className="mb-6">
+          <Text className="text-gray-600 text-sm">Journey Date</Text>
+          <Text className="text-gray-800">{new Date(tripDetails.booking.journeyDate).toLocaleDateString()}</Text>
+        </View>
+
+        <View className="bg-gray-200 p-2 mb-4">
+          <Text className="font-semibold">Hydrant</Text>
+        </View>
+
+        <View className="mb-6">
+          <Text className="text-gray-600 text-sm">Name</Text>
+          <Text className="text-gray-800">{tripDetails.hydrant.name}</Text>
+
+          <Text className="text-gray-600 text-sm mt-2">Address</Text>
+          <View className="flex-row items-center">
+            <Text className="text-gray-800 flex-1">{tripDetails.hydrant.address}</Text>
+            <TouchableOpacity onPress={() => handleOpenLocation(tripDetails.hydrant.latitude, tripDetails.hydrant.longitude)} className="ml-2">
+              <Ionicons name="location" size={24} color="#3b82f6" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View className="bg-gray-200 p-2 mb-4">
+          <Text className="font-semibold">Destination</Text>
+        </View>
+
+        <View className="mb-6">
+          <Text className="text-gray-600 text-sm">Name</Text>
+          <Text className="text-gray-800">{tripDetails.destination.name}</Text>
+
+          <Text className="text-gray-600 text-sm mt-2">Number</Text>
+          <View className="flex-row items-center">
+            <Text className="text-gray-800 flex-1">{tripDetails.customer.contactNumber}</Text>
+            <TouchableOpacity onPress={() => handleCall(tripDetails.customer.contactNumber)} className="ml-2">
+              <Ionicons name="call" size={24} color="#3b82f6" />
+            </TouchableOpacity>
           </View>
 
-          {/* Trip Stats */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
-            <View className="flex-row justify-between">
-              <View className="flex-1 items-center border-r border-gray-100">
-                <Ionicons name="calendar" size={24} color="#3B82F6" />
-                <Text className="text-xs text-gray-500 font-Jakarta mt-2">
-                  Journey Date
-                </Text>
-                <Text className="text-sm font-JakartaSemiBold text-gray-900 mt-1">
-                  {new Date(tripDetails.booking.journeyDate).toLocaleDateString('en-IN', {
-                    day: 'numeric',
-                    month: 'short'
-                  })}
-                </Text>
-              </View>
-              <View className="flex-1 items-center">
-                <Ionicons name="speedometer" size={24} color="#8B5CF6" />
-                <Text className="text-xs text-gray-500 font-Jakarta mt-2">
-                  Distance
-                </Text>
-                <Text className="text-sm font-JakartaSemiBold text-gray-900 mt-1">
-                  {tripDetails?.distance !== null 
-                    ? `${tripDetails.distance.toFixed(1)} km` 
-                    : "Tracking..."}
-                </Text>
-              </View>
-            </View>
+          <Text className="text-gray-600 text-sm mt-2">Address</Text>
+          <View className="flex-row items-center">
+            <Text className="text-gray-800 flex-1">{tripDetails.destination.address}</Text>
+            <TouchableOpacity onPress={() => handleOpenLocation(tripDetails.destination.latitude, tripDetails.destination.longitude)} className="ml-2">
+              <Ionicons name="location" size={24} color="#3b82f6" />
+            </TouchableOpacity>
           </View>
+        </View>
 
-          {/* Location Tracking Status */}
-          <View className={`rounded-2xl p-4 mb-4 flex-row items-center ${
-            trackingStatus ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'
-          }`}>
-            <View className={`w-10 h-10 rounded-full items-center justify-center ${
-              trackingStatus ? 'bg-green-500' : 'bg-amber-500'
-            }`}>
-              <Ionicons 
-                name={trackingStatus ? "checkmark-circle" : "alert-circle"} 
-                size={24} 
-                color="white" 
-              />
-            </View>
-            <View className="flex-1 ml-3">
-              <Text className={`text-sm font-JakartaSemiBold ${
-                trackingStatus ? 'text-green-900' : 'text-amber-900'
-              }`}>
-                Location Tracking {trackingStatus ? 'Active' : 'Inactive'}
-              </Text>
-              <Text className={`text-xs font-Jakarta mt-0.5 ${
-                trackingStatus ? 'text-green-700' : 'text-amber-700'
-              }`}>
-                {trackingStatus 
-                  ? 'Your location is being tracked in real-time' 
-                  : 'Enable location permissions to track trip'}
-              </Text>
-            </View>
-          </View>
+        <View className="mb-4">
+          <Text className="text-lg font-semibold">Location Tracking</Text>
+          <Text>{hasLocationPermission ? "Enabled" : "Disabled"}</Text>
+          <Text>App State: {appState}</Text>
+          <Text>Tracking: {trackingStatus ? "Active" : "Inactive"}</Text>
+        </View>
 
-          {/* Pickup Location */}
-          <LocationCard
-            icon="water"
-            title="Pickup Location"
-            name={tripDetails.hydrant.name}
-            address={tripDetails.hydrant.address}
-            latitude={tripDetails.hydrant.latitude}
-            longitude={tripDetails.hydrant.longitude}
-            type="pickup"
-          />
-
-          {/* Delivery Location */}
-          <LocationCard
-            icon="location"
-            title="Delivery Location"
-            name={tripDetails.destination.name}
-            address={tripDetails.destination.address}
-            latitude={tripDetails.destination.latitude}
-            longitude={tripDetails.destination.longitude}
-            type="delivery"
-          />
-
-          {/* Customer Info */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
-            <Text className="text-base font-JakartaBold text-gray-900 mb-4">
-              Customer Details
-            </Text>
-            <View className="flex-row items-center justify-between mb-3">
-              <View className="flex-row items-center flex-1">
-                <Ionicons name="person" size={20} color="#6B7280" />
-                <Text className="text-sm text-gray-900 font-JakartaSemiBold ml-3">
-                  {tripDetails.customer.name}
-                </Text>
-              </View>
-            </View>
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center flex-1">
-                <Ionicons name="call" size={20} color="#6B7280" />
-                <Text className="text-sm text-gray-700 font-Jakarta ml-3">
-                  {tripDetails.customer.contactNumber}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => handleCall(tripDetails.customer.contactNumber)}
-                className="bg-blue-600 px-4 py-2 rounded-xl"
-                activeOpacity={0.7}
-              >
-                <View className="flex-row items-center">
-                  <Ionicons name="call" size={16} color="white" />
-                  <Text className="text-white font-JakartaSemiBold ml-2">Call</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Animated.View>
+        <View className="mb-4">
+          <Text className="text-lg font-semibold">Distance Traveled</Text>
+          <Text>{tripDetails?.distance !== null ? `${tripDetails.distance.toFixed(2)} km` : "Calculating..."}</Text>
+        </View>
       </ScrollView>
 
-      {/* Action Buttons - Fixed at Bottom */}
-      <View className="bg-white px-5 py-4 border-t border-gray-200">
+      <View className="flex-row justify-around p-4">
         {!tripDetails.photo ? (
-          <CustomButton
-            title={
-              isVerifyingLocation 
-                ? "Verifying Location..." 
-                : uploadingImage 
-                ? "Uploading Photo..." 
-                : "📸 Reached Hydrant"
-            }
+          <TouchableOpacity
+            className="bg-teal-500 p-4 rounded flex-1 mr-2"
             onPress={pickImageFromCamera}
-            disabled={uploadingImage || isVerifyingLocation}
-            className="bg-blue-600"
-            IconLeft={isVerifyingLocation || uploadingImage ? () => (
-              <ActivityIndicator size="small" color="white" className="mr-2" />
-            ) : undefined}
-          />
-        ) : !tripDetails.video ? (
-          <View>
-            <View className="bg-green-50 border border-green-200 rounded-xl p-4 mb-3 flex-row items-center">
-              <Ionicons name="checkmark-circle" size={24} color="#10B981" />
-              <Text className="text-green-700 font-JakartaSemiBold ml-3">
-                Photo Uploaded Successfully
-              </Text>
-            </View>
-            <CustomButton
-              title={
-                isVerifyingLocation 
-                  ? "Verifying Location..." 
-                  : uploadingVideo 
-                  ? "Uploading Video..." 
-                  : "🎥 Upload Water Supply Video"
-              }
-              onPress={pickVideoFromCamera}
-              disabled={uploadingVideo || isVerifyingLocation}
-              className="bg-green-600"
-              IconLeft={isVerifyingLocation || uploadingVideo ? () => (
-                <ActivityIndicator size="small" color="white" className="mr-2" />
-              ) : undefined}
-            />
-          </View>
+            disabled={uploadingImage || isVerifyingLocation} // Disable on location check
+          >
+            <Text className="text-white text-center font-bold">
+              {getHydrantButtonText()}
+            </Text>
+          </TouchableOpacity>
         ) : (
-          <View>
-            <View className="bg-green-50 border border-green-200 rounded-xl p-4 mb-3 flex-row items-center">
-              <Ionicons name="checkmark-done-circle" size={24} color="#10B981" />
-              <Text className="text-green-700 font-JakartaSemiBold ml-3">
-                Photo & Video Uploaded
+          <View className="flex-1 space-y-4">
+            <View className="flex-row items-center justify-center bg-green-100 p-4 rounded mb-4">
+              <Image source={require("@/assets/images/check.png")} style={{ width: 24, height: 24, marginRight: 8 }} />
+              <Text className="text-green-700 font-semibold">
+                {!tripDetails.video ? "Photo Uploaded" : "Photo and Video Uploaded"}
               </Text>
             </View>
-            <CustomButton
-              title={isLoading ? "Sending OTP..." : "🔐 Send OTP for Verification"}
-              onPress={handleSendOTP}
-              disabled={isLoading}
-              className="bg-orange-600"
-              IconLeft={isLoading ? () => (
-                <ActivityIndicator size="small" color="white" className="mr-2" />
-              ) : undefined}
-            />
+
+            {!tripDetails.video && (
+              <TouchableOpacity
+                className="bg-pink-500 p-4 rounded"
+                onPress={pickVideoFromCamera}
+                disabled={uploadingVideo || isVerifyingLocation} // Disable on location check
+              >
+                <Text className="text-white text-center font-bold">
+                  {getVideoUploadButtonText()}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {tripDetails.video && (
+              <TouchableOpacity className="bg-orange-600 p-4 rounded" 
+                onPress={handleSendOTP} 
+                disabled={isLoading}
+              >
+                <Text className="text-white text-center font-bold">
+                  {isLoading ? "SENDING OTP..." : "SEND OTP FOR VERIFICATION"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </View>
 
-      {/* Image Stamping Modal */}
+      {/* --- NEW MODAL FOR IMAGE STAMPING --- */}
       <ReactNativeModal isVisible={imageToStamp !== null}>
-        <View className="bg-white rounded-2xl p-5">
-          <Text className="text-xl font-JakartaBold text-gray-900 mb-4">
-            Confirm Photo
-          </Text>
+        <View className="bg-white p-4 rounded-lg">
+          <Text className="text-lg font-bold mb-4">Confirm Image</Text>
           
           <ViewShot
             ref={viewShotRef}
             options={{ format: "jpg", quality: 0.9 }}
           >
             <View style={{
-              width: width - 60,
+              width: 380,
               height: 500,
               backgroundColor: '#000',
               position: 'relative',
               overflow: 'hidden',
-              borderRadius: 12,
             }}>
+              {/* Full-cover image */}
               <Image
                 source={{ uri: imageToStamp?.asset.uri }}
                 style={{
@@ -844,47 +617,34 @@ export default function Trip() {
                 resizeMode="cover"
               />
           
+              {/* TOP-LEFT STAMP (exactly like your screenshot) */}
               <View style={{
                 position: 'absolute',
                 top: 12,
                 left: 12,
-                backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                backgroundColor: 'rgba(0, 0, 0, 0.6)',
                 paddingVertical: 10,
                 paddingHorizontal: 14,
                 borderRadius: 8,
                 borderWidth: 1,
                 borderColor: 'rgba(255, 255, 255, 0.3)',
               }}>
-                <View className="flex-row items-center mb-1">
-                  <Ionicons name="location" size={14} color="#10B981" />
-                  <Text style={{ color: 'white', fontSize: 11, fontWeight: '600', marginLeft: 6 }}>
-                    GPS Coordinates
-                  </Text>
-                </View>
-                <Text style={{ color: 'white', fontSize: 12, fontWeight: '500' }}>
-                  {imageToStamp?.location.coords.latitude.toFixed(6)}°N
+                <Text style={{ color: 'white', fontSize: 13, fontWeight: '600' }}>
+                  Lat: {imageToStamp?.location.coords.latitude.toFixed(6)}
                 </Text>
-                <Text style={{ color: 'white', fontSize: 12, fontWeight: '500' }}>
-                  {imageToStamp?.location.coords.longitude.toFixed(6)}°E
+                <Text style={{ color: 'white', fontSize: 13, fontWeight: '600' }}>
+                  Lon: {imageToStamp?.location.coords.longitude.toFixed(6)}
                 </Text>
-                <View className="border-t border-white/20 mt-2 pt-2">
-                  <Text style={{ color: '#93C5FD', fontSize: 11 }}>
-                    {new Date(imageToStamp?.location.timestamp || Date.now())
-                      .toLocaleString("en-IN", { 
-                        timeZone: "Asia/Kolkata",
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                  </Text>
-                </View>
+                <Text style={{ color: 'white', fontSize: 12, marginTop: 4, opacity: 0.9 }}>
+                  {new Date(imageToStamp?.location.timestamp || Date.now())
+                    .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+                </Text>
               </View>
             </View>
           </ViewShot>
                   
-          <View className="flex-row justify-between mt-5">
+          {/* Buttons */}
+          <View className="flex-row justify-between">
             <CustomButton
               title="Retake"
               onPress={() => setImageToStamp(null)}
@@ -892,19 +652,16 @@ export default function Trip() {
               disabled={uploadingImage}
             />
             <CustomButton
-              title={uploadingImage ? "Uploading..." : "Confirm"}
+              title={uploadingImage ? "Uploading..." : "Confirm & Upload"}
               onPress={handleConfirmAndUploadImage}
-              className="bg-green-600 flex-1 ml-2"
+              className="bg-success-500 flex-1 ml-2"
               disabled={uploadingImage}
-              IconLeft={uploadingImage ? () => (
-                <ActivityIndicator size="small" color="white" className="mr-2" />
-              ) : undefined}
             />
           </View>
+          {uploadingImage && <ActivityIndicator size="large" color="#0000ff" className="mt-4" />}
         </View>
       </ReactNativeModal>
 
-      {/* OTP Verification Modal */}
       <ReactNativeModal
         isVisible={verification.state === "pending"}
         onModalHide={() => {
@@ -913,63 +670,39 @@ export default function Trip() {
           }
         }}
       >
-        <View className="bg-white px-7 py-9 rounded-3xl min-h-[380px]">
-          <View className="items-center mb-6">
-            <View className="w-16 h-16 bg-blue-100 rounded-full items-center justify-center mb-4">
-              <Ionicons name="lock-closed" size={32} color="#3B82F6" />
-            </View>
-            <Text className="font-JakartaBold text-2xl mb-2 text-center">
-              Enter OTP
-            </Text>
-            <Text className="font-Jakarta text-gray-600 text-center">
-              Code sent to {tripDetails.customer.contactNumber}
-            </Text>
-          </View>
-          
+        <View className="bg-white px-7 py-9 rounded-2xl min-h-[300px]">
+          <Text className="font-JakartaExtraBold text-2xl mb-2">Verification</Text>
+          <Text className="font-Jakarta mb-5">We've sent a verification code to customer phone number {tripDetails.customer.contactNumber}.</Text>
           <InputField
-            label="Verification Code"
+            label={"Code"}
             icon={icons.lock}
-            placeholder="0000"
+            placeholder={"1234"}
             value={verification.code}
             keyboardType="numeric"
-            maxLength={4}
             onChangeText={(code) => setVerification({ ...verification, code })}
           />
-          
-          {verification.error && (
-            <Text className="text-red-500 text-sm mt-2">
-              {verification.error}
-            </Text>
-          )}
-          
+          {verification.error && <Text className="text-red-500 text-sm mt-1">{verification.error}</Text>}
           <CustomButton
             title={isLoading ? "Verifying..." : "Verify OTP"}
             onPress={handleVerifyOTP}
-            className="mt-5 bg-blue-600"
+            className="mt-5 bg-success-500"
             disabled={isLoading}
           />
         </View>
       </ReactNativeModal>
 
-      {/* Success Modal */}
-      <ReactNativeModal isVisible={showSuccessModal}>
-        <View className="bg-white px-7 py-9 rounded-3xl items-center">
-          <View className="w-24 h-24 bg-green-100 rounded-full items-center justify-center mb-6">
-            <Ionicons name="checkmark-circle" size={60} color="#10B981" />
-          </View>
-          <Text className="font-JakartaBold text-3xl text-gray-900 mb-2">
-            Trip Completed!
-          </Text>
-          <Text className="font-Jakarta text-center text-gray-600 mb-8 px-4">
-            Your trip has been successfully completed and verified.
-          </Text>
+      <ReactNativeModal isVisible={showSuccessModal} onBackdropPress={() => setShowSuccessModal(false)}>
+        <View className="bg-white px-7 py-9 rounded-2xl items-center">
+          <Image source={require("../../../assets/images/check.png")} className="w-20 h-20 mr-2" />
+          <Text className="font-JakartaExtraBold text-3xl mt-3">Success</Text>
+          <Text className="font-Jakarta text-center mt-2 mb-4">Trip completed successfully.</Text>
           <CustomButton 
-            title="Back to Home" 
+            title="Close" 
             onPress={() => {
-              setShowSuccessModal(false)
-              router.push(`/(root)/(tabs)/home`)
-            }} 
-            className="w-full bg-green-600"
+              setShowSuccessModal(false);
+              router.push(`/(root)/(tabs)/home`)}
+            } 
+            className="mt-5 bg-success-500 text-white"
           />
         </View>
       </ReactNativeModal>
