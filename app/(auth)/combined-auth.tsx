@@ -281,11 +281,12 @@ import CustomButton from "@/components/CustomButton";
 import InputField from "@/components/InputField";
 import { icons, images } from "@/constants";
 import { fetchAPI } from "@/lib/fetch";
+import { tokenCache } from "@/lib/auth"; // Using your auth helper
 import React from "react";
-import { tokenCache } from "@/lib/auth"; // Assuming you use this for token management
 
 export default function CombinedAuth() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showAccountIssueModal, setShowAccountIssueModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const [form, setForm] = useState({
@@ -293,13 +294,12 @@ export default function CombinedAuth() {
   });
   
   const [verification, setVerification] = useState({
-    state: "default", // default, pending, success, failed
+    state: "default",
     error: "",
     code: "",
-    verificationId: "", // Store the ID received from the Send OTP API
-    mobileNumber: ""
+    verificationId: "", // Added to store the ID from Message Central
   });
-
+  
   const [vehicleInfo, setVehicleInfo] = useState({
     vehicleNumber: "",
     vehicleId: "",
@@ -316,49 +316,55 @@ export default function CombinedAuth() {
   const onAuthPress = async () => {
     setIsLoading(true);
     try {
-      console.log('Checking vehicle:', form.vehicleNumber);
-      // 1. Check if vehicle exists
-      const vehicleResponse = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/vehicle`, {
+      // 1. Check if Vehicle Exists
+      console.log('Attempting to check vehicle:', form.vehicleNumber);
+      const vehicleCheckResponse = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/vehicle`, {
         method: "POST",
         body: JSON.stringify({
           vehicleNumber: form.vehicleNumber,
         }),
       });
 
-      if (vehicleResponse.exists) {
-        const contactNumber = vehicleResponse.contactNumber; // e.g., "9999999999"
+      if (vehicleCheckResponse.exists) {
+        const contactNumber = vehicleCheckResponse.contactNumber; // e.g., "9999999999"
         
+        // Store vehicle info needed for verification step
         setVehicleInfo({
           vehicleNumber: form.vehicleNumber,
-          vehicleId: vehicleResponse.vehicleId,
+          vehicleId: vehicleCheckResponse.vehicleId,
         });
 
-        // 2. Send OTP via your Backend (which calls Message Central)
-        // Reusing the existing generic send-otp route
-        const otpResponse = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/send-otp`, {
+        // 2. Send OTP using your Custom API (Message Central)
+        console.log('Initiating Custom OTP send to:', contactNumber);
+        
+        const otpResponse = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/auth/send-otp`, {
           method: "POST",
           body: JSON.stringify({
-            phoneNumber: contactNumber, // Ensure this includes country code if your API expects it, or handle it in backend
+            phoneNumber: contactNumber, // Backend expects 'phoneNumber'
+            otpLength: 4 // Optional, matches your default
           }),
         });
 
         if (otpResponse.success) {
-          setVerification({ 
-            ...verification, 
-            state: "pending",
-            verificationId: otpResponse.verificationId, //
-            mobileNumber: contactNumber
-          });
+           setVerification({ 
+             ...verification, 
+             state: "pending",
+             verificationId: otpResponse.verificationId // Store this for the verify step
+           });
         } else {
-          throw new Error(otpResponse.error || "Failed to send OTP");
+          Alert.alert("Error", otpResponse.error || "Failed to send OTP.");
         }
 
       } else {
-        Alert.alert("Error", "Vehicle not found. Please check the vehicle number.");
+        console.log('Vehicle not found');
+        Alert.alert("Error", vehicleCheckResponse.error || "Vehicle not found. Please check the vehicle number.");
       }
     } catch (err: any) {
-      console.error('Auth error:', err);
-      Alert.alert("Error", err.message || "An unexpected error occurred.");
+      console.error('Error in onAuthPress:', err);
+      Alert.alert(
+        "Error",
+        err.message || "An unexpected error occurred. Please try again later."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -367,40 +373,59 @@ export default function CombinedAuth() {
   const onPressVerify = async () => {
     setIsLoading(true);
     try {
-      // 3. Verify OTP via your Backend
-      // You need to create this endpoint (see below)
+      console.log('Attempting to verify OTP:', verification.code);
+
+      // 3. Verify OTP using your Custom API
+      // Your backend route expects: { verificationId, otp, vehicleId }
       const verifyResponse = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/auth/verify-otp`, {
         method: "POST",
         body: JSON.stringify({
-          verificationId: verification.verificationId, //
-          otp: verification.code, //
-          mobileNumber: verification.mobileNumber
+          verificationId: verification.verificationId,
+          otp: verification.code,
+          vehicleId: vehicleInfo.vehicleId
         }),
       });
 
       if (verifyResponse.success) {
-        // Save session/token
+        // 4. Handle Success & Session
+        // Save the JWT token using your auth helper
         if (verifyResponse.token) {
-           await tokenCache.saveToken("authToken", verifyResponse.token);
+          await tokenCache.saveToken('jwt', verifyResponse.token);
         }
-        await saveVehicleInfo(vehicleInfo);
         
+        await saveVehicleInfo(vehicleInfo);
+
         setVerification({
           ...verification,
           state: "success",
+          error: "",
         });
       } else {
-        throw new Error(verifyResponse.error || "Invalid OTP");
+        setVerification({
+          ...verification,
+          error: verifyResponse.error || "Verification failed",
+          state: "failed",
+        });
       }
     } catch (err: any) {
+      console.error('Error in onPressVerify:', err);
       setVerification({
         ...verification,
-        error: err.message || "Verification failed",
+        error: "Verification failed. Please try again.",
         state: "failed",
       });
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleAccountIssue = () => {
+    // This might be less relevant without Clerk, but keeping for UI consistency
+    Alert.alert(
+      "Contact Support",
+      "Please contact your administrator to resolve issues with your vehicle registration.",
+      [{ text: "OK", onPress: () => setShowAccountIssueModal(false) }]
+    );
   };
 
   return (
@@ -427,9 +452,8 @@ export default function CombinedAuth() {
             disabled={isLoading}
           />
         </View>
-
         <ReactNativeModal
-          isVisible={verification.state === "pending" || verification.state === "failed"}
+          isVisible={verification.state === "pending"}
           onModalHide={() => {
             if (verification.state === "success") {
               setShowSuccessModal(true);
@@ -441,37 +465,31 @@ export default function CombinedAuth() {
               Verification
             </Text>
             <Text className="font-Jakarta mb-5">
-              We've sent a verification code to {verification.mobileNumber}.
+              We've sent a verification code to your registered phone number.
             </Text>
             <InputField
               label={"Code"}
               icon={icons.lock}
-              placeholder={"123456"}
+              placeholder={"1234"}
               value={verification.code}
               keyboardType="numeric"
               onChangeText={(code) =>
-                setVerification({ ...verification, code, error: "" })
+                setVerification({ ...verification, code })
               }
             />
-            {verification.error ? (
+            {verification.error && (
               <Text className="text-red-500 text-sm mt-1">
                 {verification.error}
               </Text>
-            ) : null}
+            )}
             <CustomButton
               title={isLoading ? "Verifying..." : "Verify OTP"}
               onPress={onPressVerify}
               className="mt-5 bg-success-500"
               disabled={isLoading}
             />
-            <CustomButton
-              title="Cancel"
-              onPress={() => setVerification({ ...verification, state: "default" })}
-              className="mt-3 bg-gray-200 text-black"
-            />
           </View>
         </ReactNativeModal>
-
         <ReactNativeModal isVisible={showSuccessModal}>
           <View className="bg-white px-7 py-9 rounded-2xl min-h-[300px]">
             <Image
@@ -487,10 +505,30 @@ export default function CombinedAuth() {
             <CustomButton
               title="Browse Home"
               onPress={() => {
-                setShowSuccessModal(false);
+                setShowSuccessModal(false); 
                 router.push(`/(root)/(tabs)/home`);
               }}
               className="mt-5"
+            />
+          </View>
+        </ReactNativeModal>
+        <ReactNativeModal isVisible={showAccountIssueModal}>
+          <View className="bg-white px-7 py-9 rounded-2xl min-h-[300px]">
+            <Text className="font-JakartaExtraBold text-2xl mb-2">
+              Account Issue Detected
+            </Text>
+            <Text className="font-Jakarta mb-5">
+              We're having trouble accessing your account. This could be due to a discrepancy in our records.
+            </Text>
+            <CustomButton
+              title="Contact Support"
+              onPress={handleAccountIssue}
+              className="mt-5 bg-warning-500"
+            />
+            <CustomButton
+              title="Cancel"
+              onPress={() => setShowAccountIssueModal(false)}
+              className="mt-3"
             />
           </View>
         </ReactNativeModal>

@@ -1,17 +1,13 @@
-import { useUser, useAuth } from "@clerk/clerk-expo";
-import { ScrollView, Text, View, TouchableOpacity } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useEffect } from "react";
-import { Link } from "expo-router";
+import { router } from "expo-router";
 import * as SecureStore from 'expo-secure-store';
 
 import InputField from "@/components/InputField";
-import { icons } from "@/constants";
 import React from "react";
 
 const Profile = () => {
-  const { user } = useUser();
-  const { signOut } = useAuth();
   const [vehicleInfo, setVehicleInfo] = useState({ vehicleNumber: "", vehicleId: "" });
 
   useEffect(() => {
@@ -29,6 +25,33 @@ const Profile = () => {
     }
   };
 
+  const handleSignOut = async () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign Out",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // clear tokens and session data
+              await SecureStore.deleteItemAsync('jwt');
+              await SecureStore.deleteItemAsync('vehicleInfo');
+              
+              // Redirect to auth screen
+              router.replace("/(auth)/combined-auth");
+            } catch (error) {
+              console.error("Error signing out:", error);
+              Alert.alert("Error", "Failed to sign out. Please try again.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-gray-100">
       <ScrollView
@@ -37,13 +60,6 @@ const Profile = () => {
       >
         <Text className="text-3xl font-bold text-center text-blue-600 my-6">My Profile</Text>
         <View className="bg-white rounded-lg shadow-md p-5 space-y-4">
-          <InputField
-            label="Phone"
-            placeholder={user?.primaryPhoneNumber?.phoneNumber || "Not Found"}
-            containerStyle="w-full bg-gray-50"
-            inputStyle="p-3.5 text-gray-800"
-            editable={false}
-          />
           <InputField
             label="Vehicle Number"
             placeholder={vehicleInfo.vehicleNumber || "Not Found"}
@@ -62,11 +78,12 @@ const Profile = () => {
 
         {/* Sign Out Button */}
         <View className="mt-10">
-          <Link href="/(auth)/combined-auth" onPress={() => signOut()} asChild>
-            <TouchableOpacity className="bg-blue-500 p-4 rounded-full">
-              <Text className="text-center text-white font-semibold text-lg">Sign Out</Text>
-            </TouchableOpacity>
-          </Link>
+          <TouchableOpacity 
+            className="bg-blue-500 p-4 rounded-full"
+            onPress={handleSignOut}
+          >
+            <Text className="text-center text-white font-semibold text-lg">Sign Out</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
