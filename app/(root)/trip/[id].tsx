@@ -356,6 +356,7 @@ export default function Trip() {
       const asset = {
         uri: uri,
         type: 'video',
+        mimeType: "video/mp4",
         fileName: `video_${Date.now()}.mp4`,
       };
 
