@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react" // Import useRef
+import { useEffect, useState, useRef } from "react"
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   AppState,
   type AppStateStatus,
   Image,
-  ActivityIndicator, // Import ActivityIndicator
+  ActivityIndicator,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useLocalSearchParams, useRouter } from "expo-router"
@@ -17,15 +17,16 @@ import { fetchAPI } from "@/lib/fetch"
 import { Ionicons } from "@expo/vector-icons"
 import { setupLocationTracking, stopLocationTracking, checkTrackingStatus } from "@/lib/location"
 import * as ImagePicker from "expo-image-picker"
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from "expo-camera" // <--- Import CameraView & Hooks
 import { uploadToCloudinary } from "@/lib/cloudinary"
 import ReactNativeModal from "react-native-modal"
 import InputField from "@/components/InputField"
 import CustomButton from "@/components/CustomButton"
 import { icons } from "@/constants"
 import React from "react"
-import * as Location from "expo-location" // Import expo-location
-import { calculateDistance } from "@/lib/distance" // Import the distance calculator
-import ViewShot from "react-native-view-shot" // Import ViewShot
+import * as Location from "expo-location"
+import { calculateDistance } from "@/lib/distance"
+import ViewShot from "react-native-view-shot"
 
 declare global {
   var tripId: string
@@ -44,20 +45,21 @@ interface TripDetails {
   video: string | null
   booking: {
     id: string
+    readableId: number
     journeyDate: string
     status: string
   }
   hydrant: {
     name: string
     address: string
-    latitude: number  // <-- REQUIRED: Must be provided by your API
-    longitude: number // <-- REQUIRED: Must be provided by your API
+    latitude: number
+    longitude: number
   }
   destination: {
     name: string
     address: string
-    latitude: number  // <-- REQUIRED: Must be provided by your API
-    longitude: number // <-- REQUIRED: Must be provided by your API
+    latitude: number
+    longitude: number
   }
   customer: {
     name: string
@@ -80,14 +82,17 @@ export default function Trip() {
   const [hasLocationPermission, setHasLocationPermission] = useState(false)
   const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState)
   const [trackingStatus, setTrackingStatus] = useState(false)
+  
+  // Upload States
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [isVerifyingLocation, setIsVerifyingLocation] = useState(false)
   
-  // State for the image stamping modal
+  // Image Stamp Modal State
   const [imageToStamp, setImageToStamp] = useState<ImageStampDetails | null>(null);
   const viewShotRef = useRef<ViewShot>(null);
 
+  // OTP Verification State
   const [verification, setVerification] = useState({
     state: "idle",
     code: "",
@@ -96,6 +101,13 @@ export default function Trip() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [verificationId, setVerificationId] = useState<string | null>(null)
+
+  // --- NEW: Camera Modal & Recording State ---
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const cameraRef = useRef<CameraView>(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
 
   useEffect(() => {
     global.tripId = id
@@ -117,7 +129,6 @@ export default function Trip() {
 
       if (response && response.success) {
         setTripDetails(response.trip)
-         // Check if API is sending coordinates
         if (!response.trip?.hydrant?.latitude || !response.trip?.destination?.latitude) {
             Alert.alert("API Error", "Location coordinates for hydrant or destination are missing. Please contact support.")
             setError("Missing location coordinates from API.")
@@ -162,7 +173,7 @@ export default function Trip() {
       } else {
         Alert.alert(
           "Location Not Correct",
-          `You must be within 50 meters of the ${targetName} to perform this action. You are currently ~${(
+          `You must be within 70 meters of the ${targetName} to perform this action. You are currently ~${(
             distance * 1000
           ).toFixed(0)} meters away.`
         )
@@ -177,12 +188,10 @@ export default function Trip() {
     }
   }
 
-
   const handleOpenLocation = (latitude: number, longitude: number) => {
     const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
     Linking.openURL(url);
   };
-
 
   const handleCall = (phoneNumber: string) => {
     Linking.openURL(`tel:${phoneNumber}`)
@@ -212,18 +221,12 @@ export default function Trip() {
     }
   }
 
-  // --- UPDATED FUNCTION ---
   const pickImageFromCamera = async () => {
     if (!tripDetails) return
 
-    // 1. Check location *before* opening camera
     const location = await checkLocationProximity(tripDetails.hydrant, "hydrant")
-    
-    if (!location) {
-      return // Stop if not at location
-    }
+    if (!location) return 
 
-    // 2. Proceed with camera if check passed
     const permission = await ImagePicker.requestCameraPermissionsAsync()
     if (permission.granted) {
       const result = await ImagePicker.launchCameraAsync({
@@ -232,23 +235,18 @@ export default function Trip() {
         quality: 1,
       })
 
-      if (result.canceled) {
-        return;
-      }
+      if (result.canceled) return;
 
-      // 3. Set image to be stamped, which opens the modal
       setImageToStamp({ asset: result.assets[0], location: location });
     }
   }
 
-  // --- NEW FUNCTION: To handle the stamped image upload ---
   const handleConfirmAndUploadImage = async () => {
     if (!viewShotRef.current || !imageToStamp) return;
 
-    setUploadingImage(true); // Show loading indicator
+    setUploadingImage(true);
     
     try {
-      // 1. Capture the ViewShot component as a URI
       let uri: string | undefined;
       if (viewShotRef.current && typeof viewShotRef.current.capture === "function") {
         uri = await viewShotRef.current.capture();
@@ -256,29 +254,21 @@ export default function Trip() {
         throw new Error("ViewShot ref or capture method is undefined.");
       }
 
-      // 2. Create a fake asset object for Cloudinary
       const stampedAsset = {
         ...imageToStamp.asset,
-        uri: uri, // Use the new captured URI
-        // We need to fake the type for cloudinary upload
+        uri: uri, 
         type: 'image/jpeg', 
       };
 
-      // 3. Upload the *stamped* image
       const link = await uploadToCloudinary(stampedAsset);
-      console.log("Uploaded stamped image link =>", link);
-      
-      // 4. Send link to our backend
       await handleReachedHydrant(link);
 
     } catch (error) {
       console.error("Error capturing or uploading stamped image:", error);
       Alert.alert("Upload Error", "Failed to upload the stamped image.");
-      setUploadingImage(false); // Hide loading on error
+      setUploadingImage(false); 
     } finally {
-      // 5. Close the modal
       setImageToStamp(null);
-      // uploadingImage state is reset inside handleReachedHydrant
     }
   };
 
@@ -286,10 +276,7 @@ export default function Trip() {
     setAppState(nextAppState)
 
     if (appState.match(/inactive|background/) && nextAppState === "active") {
-      console.log("App has moved to the foreground, ensuring location tracking is active.")
       initializeLocationTracking(tripId)
-    } else if (appState === "active" && nextAppState.match(/inactive|background/)) {
-      console.log("App has moved to the background, continuing location tracking.")
     }
   }
 
@@ -297,10 +284,7 @@ export default function Trip() {
     const success = await setupLocationTracking(tripId)
     setHasLocationPermission(success)
     if (!success) {
-      Alert.alert(
-        "Permission Required",
-        "This app needs location permissions to track your trip, including when the app is in the background.",
-      )
+      Alert.alert("Permission Required", "This app needs location permissions to track your trip.")
     }
     setTrackingStatus(success)
   }
@@ -313,47 +297,89 @@ export default function Trip() {
     updateTrackingStatus()
   }, [])
 
-  const pickVideoFromCamera = async () => {
+  // --- NEW: Open Custom Camera Modal ---
+  const handleOpenVideoCamera = async () => {
     if (!tripDetails) return;
 
+    // 1. Verify Location
     const location = await checkLocationProximity(tripDetails.destination, "destination");
-    if (!location) {
-      return; 
+    if (!location) return;
+
+    // 2. Check Permissions
+    if (!cameraPermission?.granted || !microphonePermission?.granted) {
+      const cameraStatus = await requestCameraPermission();
+      const micStatus = await requestMicrophonePermission();
+      if (!cameraStatus.granted || !micStatus.granted) {
+        Alert.alert("Permission Required", "Camera and Microphone permissions are needed to record video.");
+        return;
+      }
     }
 
-    try {
-      const permission = await ImagePicker.requestCameraPermissionsAsync()
-      if (permission.granted) {
-        const result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-          quality: 1,
-          videoMaxDuration: 15,
-        })
+    // 3. Open Modal
+    setShowCameraModal(true);
+  }
 
-        if (!result.canceled) {
-          setUploadingVideo(true)
-          const videoUrl = await uploadToCloudinary(result.assets[0])
-
-          const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/water-delivered?id=${id}`, {
-            method: "POST",
-            body: JSON.stringify({ videoUrl }),
-          })
-
-          if (response.success) {
-            Alert.alert("Success", "Water supply video uploaded successfully")
-            fetchTripDetails()
-          } else {
-            throw new Error(response.error || "Failed to upload video")
-          }
+  // --- NEW: Start Recording with strict 15s limit ---
+  const startRecording = async () => {
+    if (cameraRef.current) {
+      try {
+        setIsRecording(true);
+        // maxDuration stops it automatically
+        const video = await cameraRef.current.recordAsync({ 
+          maxDuration: 15,
+        });
+        
+        setIsRecording(false);
+        setShowCameraModal(false); 
+        
+        if (video?.uri) {
+          handleUploadVideo(video.uri);
         }
+      } catch (error) {
+        console.error("Recording error:", error);
+        setIsRecording(false);
+      }
+    }
+  };
+
+  const stopRecording = () => {
+    if (cameraRef.current && isRecording) {
+      cameraRef.current.stopRecording();
+    }
+  };
+
+  // --- NEW: Handle Video Upload ---
+  const handleUploadVideo = async (uri: string) => {
+    try {
+      setUploadingVideo(true);
+      
+      const asset = {
+        uri: uri,
+        type: 'video',
+        fileName: `video_${Date.now()}.mp4`,
+      };
+
+      // @ts-ignore
+      const videoUrl = await uploadToCloudinary(asset);
+
+      const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/water-delivered?id=${id}`, {
+        method: "POST",
+        body: JSON.stringify({ videoUrl }),
+      });
+
+      if (response.success) {
+        Alert.alert("Success", "Water supply video uploaded successfully");
+        fetchTripDetails();
+      } else {
+        throw new Error(response.error || "Failed to upload video");
       }
     } catch (error) {
-      console.error("Error uploading video:", error)
-      Alert.alert("Error", "Failed to upload video. Please try again.")
+      console.error("Error uploading video:", error);
+      Alert.alert("Error", "Failed to upload video. Please try again.");
     } finally {
-      setUploadingVideo(false)
+      setUploadingVideo(false);
     }
-  }
+  };
 
   const handleSendOTP = async () => {
     if (!tripDetails) return;
@@ -365,8 +391,6 @@ export default function Trip() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phoneNumber: tripDetails?.customer.contactNumber }),
       })
-
-      console.log(response)
 
       if (response.success) {
         setVerificationId(response.verificationId) 
@@ -394,12 +418,6 @@ export default function Trip() {
     }
 
     try {
-      console.log({
-        verificationId, 
-        otp: verification.code,
-        tripId: id,
-      })
-
       const response = await fetchAPI(`${process.env.EXPO_PUBLIC_API_URL}/trip/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -456,7 +474,7 @@ export default function Trip() {
 
   const getHydrantButtonText = () => {
     if (isVerifyingLocation) return "CHECKING LOCATION...";
-    if (uploadingImage) return "UPLOADING..."; // This state is now set in handleConfirmAndUpload
+    if (uploadingImage) return "UPLOADING..."; 
     return "REACHED HYDRANT";
   };
 
@@ -479,7 +497,7 @@ export default function Trip() {
       <ScrollView className="flex-1 p-4">
         <View className="mb-6">
           <Text className="text-gray-600 text-sm">Booking ID</Text>
-          <Text className="text-gray-800">{tripDetails.booking.id}</Text>
+          <Text className="text-gray-800">{tripDetails.booking.readableId}</Text>
         </View>
 
         <View className="mb-6">
@@ -547,7 +565,7 @@ export default function Trip() {
           <TouchableOpacity
             className="bg-teal-500 p-4 rounded flex-1 mr-2"
             onPress={pickImageFromCamera}
-            disabled={uploadingImage || isVerifyingLocation} // Disable on location check
+            disabled={uploadingImage || isVerifyingLocation} 
           >
             <Text className="text-white text-center font-bold">
               {getHydrantButtonText()}
@@ -565,8 +583,8 @@ export default function Trip() {
             {!tripDetails.video && (
               <TouchableOpacity
                 className="bg-pink-500 p-4 rounded"
-                onPress={pickVideoFromCamera}
-                disabled={uploadingVideo || isVerifyingLocation} // Disable on location check
+                onPress={handleOpenVideoCamera} // <--- UPDATED: Calls the new Camera Modal
+                disabled={uploadingVideo || isVerifyingLocation} 
               >
                 <Text className="text-white text-center font-bold">
                   {getVideoUploadButtonText()}
@@ -588,7 +606,48 @@ export default function Trip() {
         )}
       </View>
 
-      {/* --- NEW MODAL FOR IMAGE STAMPING --- */}
+      {/* --- MODAL: Camera View for Video --- */}
+      <ReactNativeModal 
+        isVisible={showCameraModal} 
+        style={{ margin: 0 }} 
+        onBackButtonPress={() => setShowCameraModal(false)}
+      >
+        <View className="flex-1 bg-black relative">
+          <CameraView 
+            ref={cameraRef}
+            style={{ flex: 1 }}
+            mode="video"
+            facing="back"
+          />
+          
+          {/* Close Button (Left) & Record Button (Center) */}
+          <View className="absolute bottom-10 left-0 right-0 items-center justify-center flex-row">
+             <TouchableOpacity 
+               onPress={() => setShowCameraModal(false)}
+               className="bg-gray-600 p-4 rounded-full mr-8"
+               disabled={isRecording}
+             >
+               <Ionicons name="close" size={30} color="white" />
+             </TouchableOpacity>
+
+             <TouchableOpacity
+               onPress={isRecording ? stopRecording : startRecording}
+               className={`p-1 rounded-full border-4 ${isRecording ? 'border-red-500' : 'border-white'}`}
+             >
+               <View className={`w-16 h-16 rounded-full ${isRecording ? 'bg-red-500' : 'bg-white'}`} />
+             </TouchableOpacity>
+          </View>
+
+          {/* Timer Indicator */}
+          {isRecording && (
+            <View className="absolute top-12 self-center bg-red-600 px-4 py-1 rounded-full">
+              <Text className="text-white font-bold">Recording... (Max 15s)</Text>
+            </View>
+          )}
+        </View>
+      </ReactNativeModal>
+
+      {/* --- MODAL: Image Stamping --- */}
       <ReactNativeModal isVisible={imageToStamp !== null}>
         <View className="bg-white p-4 rounded-lg">
           <Text className="text-lg font-bold mb-4">Confirm Image</Text>
@@ -604,7 +663,6 @@ export default function Trip() {
               position: 'relative',
               overflow: 'hidden',
             }}>
-              {/* Full-cover image */}
               <Image
                 source={{ uri: imageToStamp?.asset.uri }}
                 style={{
@@ -616,8 +674,6 @@ export default function Trip() {
                 }}
                 resizeMode="cover"
               />
-          
-              {/* TOP-LEFT STAMP (exactly like your screenshot) */}
               <View style={{
                 position: 'absolute',
                 top: 12,
@@ -643,7 +699,6 @@ export default function Trip() {
             </View>
           </ViewShot>
                   
-          {/* Buttons */}
           <View className="flex-row justify-between">
             <CustomButton
               title="Retake"
@@ -662,6 +717,7 @@ export default function Trip() {
         </View>
       </ReactNativeModal>
 
+      {/* --- MODAL: OTP Verification --- */}
       <ReactNativeModal
         isVisible={verification.state === "pending"}
         onModalHide={() => {
