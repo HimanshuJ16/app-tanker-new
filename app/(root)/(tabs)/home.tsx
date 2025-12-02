@@ -192,7 +192,7 @@ const Home = () => {
       <View className="flex-col justify-between mb-2">
         <View>
           <Text className="text-xs text-gray-600">Booking ID</Text>
-          <Text className="text-sm font-semibold">{item.readableId}</Text>
+          <Text className="text-sm font-semibold">#{item.readableId}</Text>
         </View>
         <View>
           <Text className="text-xs text-gray-600">Booking Date</Text>

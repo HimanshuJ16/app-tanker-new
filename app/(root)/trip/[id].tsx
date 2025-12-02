@@ -497,7 +497,7 @@ export default function Trip() {
       <ScrollView className="flex-1 p-4">
         <View className="mb-6">
           <Text className="text-gray-600 text-sm">Booking ID</Text>
-          <Text className="text-gray-800">{tripDetails.booking.readableId}</Text>
+          <Text className="text-gray-800">#{tripDetails.booking.readableId}</Text>
         </View>
 
         <View className="mb-6">
